@@ -200,11 +200,9 @@ function CalcModal({
 /* ----------------- Negotiate modal (Discord webhook) ----------------- */
 function NegotiateModal({
   onClose,
-  wallet,
   amountText,
 }: {
   onClose: () => void;
-  wallet: string;
   amountText: string;
 }) {
   const [jcode, setJcode] = useState("");
@@ -218,23 +216,6 @@ function NegotiateModal({
     setSending(true);
     setOk(null);
     setErr("");
-
-    const payload = {
-      username: "Reject.App Bot",
-      embeds: [
-        {
-          title: "Negotiation Request",
-          color: 0x00ff66,
-          fields: [
-            { name: "J-Code", value: jcode || "—", inline: true },
-            { name: "Pilot", value: ign || "—", inline: true },
-            { name: "Quoted Amount", value: amountText || "—", inline: true },
-            { name: "Message", value: msg || "—" },
-          ],
-          timestamp: new Date().toISOString(),
-        },
-      ],
-    };
 
     try {
       const res = await fetch("/api/negotiation", {
@@ -414,7 +395,6 @@ export default function App() {
       {negOpen && (
         <NegotiateModal
           onClose={() => setNegOpen(false)}
-          wallet={WALLET}
           amountText={amountText}
         />
       )}
