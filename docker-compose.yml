@@ -12,7 +12,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=tw_web
-      - traefik.http.routers.www.rule=Host(`www.reject.app`)
+      - traefik.http.routers.www.rule=Host(`www.reject.app`,`reject.app`)
       - traefik.http.routers.www.entrypoints=websecure
       - traefik.http.routers.www.tls=true
       - traefik.http.services.www.loadbalancer.server.port=80
