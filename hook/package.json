@@ -1,0 +1,11 @@
+{
+  "name": "reject-hook",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "scripts": {
+    "start": "node server.js"
+  }
+}
