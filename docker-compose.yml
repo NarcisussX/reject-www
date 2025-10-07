@@ -26,7 +26,6 @@ services:
       - traefik.http.routers.www-apex.tls=true
       - traefik.http.routers.www-apex.service=www
     volumes:
-      - ./dist:/usr/share/nginx/html:ro
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
 
   api:
