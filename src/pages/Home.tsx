@@ -23,14 +23,6 @@ export default function Home() {
       {/* faint binary background */}
       <div className="matrix pointer-events-none">
         <div className="absolute inset-0 overflow-hidden">
-          <pre className="matrix-col opacity-70 select-none" style={{ position:'absolute', top:'-100%', left:0, right:0 }}>
-{`01101001 01110011 01101011
-01010010 01100101 01101110 01110100
-01000010 01100101 01100001 01110010
-01001001 01110011 01101011
-01000100 01100101 01100001 01101100
-01010000 01100001 01111001`}
-          </pre>
         </div>
       </div>
 
