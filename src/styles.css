@@ -185,30 +185,16 @@ body::before{
   filter: saturate(115%);
 }
 
-/* ===== Bigger, clearer MATRIX background ===== */
-@keyframes matrix-rain-fat {
-  0%   { background-position: 0 -140vh, 0 0, 0 0; }
-  100% { background-position: 0  140vh, 0 0, 0 0; }
-}
-
-/* Larger streaks + column grid; sits under scanlines (body::after) */
-html::before{
-  content:"";
+/* Fullscreen canvas background (under content, above pure bg) */
+.matrix-canvas{
   position: fixed;
   inset: 0;
+  width: 100vw;
+  height: 100vh;
   pointer-events: none;
-  z-index: 2;                  /* under scanlines, above pure bg */
-  opacity: .22;                /* tweak 0.16–0.28 to taste */
+  z-index: 2;          /* body::after scanlines can stay at 3 */
+  opacity: .22;        /* tweak .18–.28 to taste */
   mix-blend-mode: screen;
-  filter: saturate(120%);
-  /* layer 1: tall vertical fade bars that scroll (looks like streams)
-     layer 2: vertical column grid
-     layer 3: faint horizontal bars for chunking */
-  background:
-    linear-gradient(180deg, rgba(39,243,118,.18) 0%, rgba(39,243,118,0) 60%) 0 0 / 100% 38px repeat-y,
-    repeating-linear-gradient(90deg, rgba(39,243,118,.08) 0 3px, transparent 3px 30px),
-    repeating-linear-gradient(180deg, rgba(39,243,118,.05) 0 30px, transparent 30px 60px);
-  animation: matrix-rain-fat 16s linear infinite;
 }
 
 
