@@ -67,12 +67,8 @@ body::before{
 .content{ padding-top: 6px; }
 
 /* ---------- Panels / cards ---------- */
-.panel pre{
-  background: rgba(0,0,0,.88);             /* overrides bg-black/20 from the JSX */
-}
-
 .panel{
-  background: rgba(4,11,7,.95);  
+  background: #040b07;
   border: 1px solid var(--crt-border);
   border-radius: 6px;
   box-shadow: 0 0 0 1px rgba(39,243,118,.06) inset, 0 8px 40px rgba(39,243,118,.05);
@@ -223,5 +219,3 @@ body::before{
 /* (optional) globally make all inputs a touch darker everywhere */
 :root { --input-bg: rgba(0,0,0,.88); }
 input, textarea { background: var(--input-bg); }
-
-.matrix-canvas{ z-index: 0; }   

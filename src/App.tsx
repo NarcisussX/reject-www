@@ -40,7 +40,7 @@ function MatrixRain() {
 
         if (drops[i] * fs > h && Math.random() > 0.975) {
           drops[i] = 0;
-          speed[i] = 0.25 + Math.random() * 0.35; // new random slow speed for that column
+          speed[i] = 0.1 + Math.random() * 0.2; // new random slow speed for that column
         }
 
         drops[i] += speed[i]; // ← slower advance
