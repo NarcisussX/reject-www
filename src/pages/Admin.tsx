@@ -10,7 +10,7 @@ type ListItem = {
 };
 
 type Row = { kind: string; estimatedISK: string; fitText: string };
-type Editing = { jcode: string; ransomISK: string; rows: Row[] };
+type Editing = { jcode: string; ransomISK: string; rows: Row[]; notes: string };
 
 const AUTH_KEY = "reject.admin.auth"; // base64 "user:pass" in sessionStorage
 
@@ -61,6 +61,7 @@ export default function Admin() {
         setEditing({
             jcode: data.jcode,
             ransomISK: String(data.ransomISK || ""),
+            notes: String(data.notes || ""),
             rows: (data.structures || []).map((s: any) => ({
                 kind: s.kind,
                 estimatedISK: String(s.estimatedISK || ""),
@@ -117,7 +118,7 @@ export default function Admin() {
                     </button>
                     <button
                         onClick={() =>
-                            setEditing({ jcode: "", ransomISK: "", rows: [emptyRow()] })
+                            setEditing({ jcode: "", ransomISK: "", rows: [emptyRow()], notes: "" })
                         }
                         className="px-3 py-2 border border-green-500/40 rounded hover:bg-green-600/10"
                     >
@@ -284,6 +285,7 @@ function Editor({
         const body = {
             jcode: editing.jcode.toUpperCase(),
             ransomISK: editing.ransomISK, // send raw; server parses
+            notes: editing.notes,
             structures: editing.rows.map((r) => ({
                 kind: r.kind,
                 estimatedISK: r.estimatedISK, // raw; server parses
@@ -335,13 +337,20 @@ function Editor({
                         Supports k/m/b and commas
                     </div>
                 </div>
-
+                <textarea
+                    value={editing.notes}
+                    onChange={e => setEditing({ ...editing, notes: e.target.value })}
+                    placeholder="Notes for this J-code (shown on the public page below the structures)"
+                    className="w-full bg-black border border-green-500/40 rounded px-3 py-2"
+                    rows={4}
+                />
                 <div className="space-y-3">
                     {editing.rows.map((r, i) => (
                         <div
                             key={i}
                             className="border border-green-500/30 rounded p-3 grid md:grid-cols-3 gap-2"
                         >
+
                             <input
                                 value={r.kind}
                                 onChange={(e) => {

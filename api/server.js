@@ -14,11 +14,13 @@ app.use(express.json({ limit: '1mb' }));
 const DB_PATH = process.env.DB_PATH || '/data/reject.db';
 const db = new Database(DB_PATH);
 
+// ---- DB init ----
 db.exec(`
 CREATE TABLE IF NOT EXISTS systems (
   id INTEGER PRIMARY KEY,
   jcode TEXT UNIQUE NOT NULL,
   ransom_isk INTEGER NOT NULL,
+  notes TEXT DEFAULT '',
   created_at TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT DEFAULT CURRENT_TIMESTAMP
 );
@@ -30,6 +32,19 @@ CREATE TABLE IF NOT EXISTS structures (
   estimated_value_isk INTEGER NOT NULL
 );
 `);
+// safe migration if "notes" didn’t exist on older DBs
+try {
+  const cols = db.prepare(`PRAGMA table_info(systems)`).all().map(c => c.name);
+  if (!cols.includes('notes')) db.exec(`ALTER TABLE systems ADD COLUMN notes TEXT DEFAULT ''`);
+} catch {}
+
+function formatISKShort(n) {
+  const x = Number(n || 0);
+  if (x >= 1e9) return (x / 1e9).toFixed(2).replace(/\.00$/,'') + 'b';
+  if (x >= 1e6) return (x / 1e6).toFixed(2).replace(/\.00$/,'') + 'm';
+  if (x >= 1e3) return (x / 1e3).toFixed(2).replace(/\.00$/,'') + 'k';
+  return x.toLocaleString();
+}
 
 function parseISK(x) {
   if (typeof x === 'number' && isFinite(x)) return Math.round(x);
@@ -50,21 +65,24 @@ function parseISK(x) {
   return Math.round(n);
 }
 
+function getSystemRow(jcode) {
+  return db.prepare('SELECT * FROM systems WHERE jcode = ?').get(jcode);
+}
+
 function getSystem(jcode) {
-  const sys = db.prepare('SELECT * FROM systems WHERE jcode = ?').get(jcode);
+  const sys = getSystemRow(jcode);
   if (!sys) return null;
-  const rows = db
-    .prepare(
-      'SELECT kind, fit_text AS fitText, estimated_value_isk AS estimatedISK FROM structures WHERE system_id = ?'
-    )
-    .all(sys.id);
-  const totalStructuresISK = rows.reduce((a, r) => a + parseISK(r.estimatedISK), 0)
+  const rows = db.prepare(
+    'SELECT kind, fit_text AS fitText, estimated_value_isk AS estimatedISK FROM structures WHERE system_id = ?'
+  ).all(sys.id);
+  const totalStructuresISK = rows.reduce((a, r) => a + parseISK(r.estimatedISK), 0);
   return {
     jcode: sys.jcode,
     ransomISK: parseISK(sys.ransom_isk),
     totalStructuresISK,
     structures: rows,
     pilot: 'Leshak Pilot 1',
+    notes: sys.notes || '',
   };
 }
 
@@ -77,18 +95,33 @@ app.get('/lookup/:jcode', (req, res) => {
   res.json(data);
 });
 
+// /contact → send a rich Discord embed
 app.post('/contact', async (req, res) => {
   const { jcode, ign, message } = req.body || {};
   if (!jcode || !ign || !message) return res.status(400).json({ error: 'Missing fields' });
   const url = process.env.DISCORD_WEBHOOK_URL;
   if (!url) return res.status(500).json({ error: 'Webhook not configured' });
 
-  const payload = { content: `**Eviction contact**\nJ-code: ${jcode}\nIGN: ${ign}\nMessage: ${message}` };
+  const J = String(jcode).toUpperCase();
+  const sys = getSystem(J); // may be null if not in DB
+
+  const embed = {
+    title: "Negotiation Request",
+    color: 0x00ff66,
+    fields: [
+      { name: "J-Code", value: J, inline: true },
+      { name: "Pilot", value: ign, inline: true },
+      { name: "Quoted Amount", value: sys ? `${formatISKShort(sys.ransomISK)} ISK` : "N/A", inline: true },
+    ],
+    description: message,
+    timestamp: new Date().toISOString(),
+  };
+
   try {
     const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ username: 'SALT MINER WOOOO', embeds: [embed] }),
     });
     if (!r.ok) throw new Error(`Webhook ${r.status}`);
     res.sendStatus(204);
@@ -96,6 +129,7 @@ app.post('/contact', async (req, res) => {
     res.status(502).json({ error: 'Webhook failed' });
   }
 });
+
 
 // ---- Admin auth ----
 function requireAdmin(req, res, next) {
@@ -108,60 +142,59 @@ function requireAdmin(req, res, next) {
 }
 
 // ---- Admin CRUD ----
+// POST upsert: include notes
 app.post('/admin/systems', requireAdmin, (req, res) => {
-  const { jcode, ransomISK, structures } = req.body || {};
+  const { jcode, ransomISK, structures, notes = '' } = req.body || {};
   const J = (jcode || '').toUpperCase();
   if (!/^J\d{6}$/.test(J)) return res.status(400).json({ error: 'Invalid J-code' });
 
   const tx = db.transaction(() => {
     db.prepare(`
-      INSERT INTO systems (jcode, ransom_isk)
-      VALUES (?, ?)
+      INSERT INTO systems (jcode, ransom_isk, notes)
+      VALUES (?, ?, ?)
       ON CONFLICT(jcode) DO UPDATE SET
         ransom_isk = excluded.ransom_isk,
+        notes = excluded.notes,
         updated_at = CURRENT_TIMESTAMP
-    `).run(J, parseISK(ransomISK));
+    `).run(J, parseISK(ransomISK), String(notes));
 
     const { id } = db.prepare('SELECT id FROM systems WHERE jcode = ?').get(J);
     db.prepare('DELETE FROM structures WHERE system_id = ?').run(id);
-    const ins = db.prepare(`
-      INSERT INTO structures (system_id, kind, fit_text, estimated_value_isk)
-      VALUES (?,?,?,?)
-    `);
-    for (const s of structures || []) {
-      ins.run(id, s.kind, s.fitText, parseISK(s.estimatedISK));
-    }
+    const ins = db.prepare(
+      'INSERT INTO structures (system_id, kind, fit_text, estimated_value_isk) VALUES (?,?,?,?)'
+    );
+    for (const s of structures || []) ins.run(id, s.kind, s.fitText, parseISK(s.estimatedISK));
   });
 
   try { tx(); res.sendStatus(201); } catch { res.status(500).json({ error: 'Upsert failed' }); }
 });
 
 
+
+// PUT update: include notes
 app.put('/admin/systems/:jcode', requireAdmin, (req, res) => {
   const J = (req.params.jcode || '').toUpperCase();
-  const { ransomISK, structures } = req.body || {};
+  const { ransomISK, structures, notes = '' } = req.body || {};
   const sys = db.prepare('SELECT id FROM systems WHERE jcode = ?').get(J);
   if (!sys) return res.sendStatus(404);
 
   const tx = db.transaction(() => {
-    db.prepare('UPDATE systems SET ransom_isk = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(parseISK(ransomISK), sys.id);
+    db.prepare(`
+      UPDATE systems
+      SET ransom_isk = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(parseISK(ransomISK), String(notes), sys.id);
+
     db.prepare('DELETE FROM structures WHERE system_id = ?').run(sys.id);
-    const stmt = db.prepare(
+    const ins = db.prepare(
       'INSERT INTO structures (system_id, kind, fit_text, estimated_value_isk) VALUES (?,?,?,?)'
     );
-    for (const s of structures || [])
-      stmt.run(sys.id, s.kind, s.fitText, parseISK(s.estimatedISK));
+    for (const s of structures || []) ins.run(sys.id, s.kind, s.fitText, parseISK(s.estimatedISK));
   });
 
   try { tx(); res.sendStatus(204); } catch { res.status(500).json({ error: 'Update failed' }); }
 });
 
-app.get('/admin/systems/:jcode', requireAdmin, (req, res) => {
-  const data = getSystem((req.params.jcode || '').toUpperCase());
-  if (!data) return res.sendStatus(404);
-  res.json(data);
-});
 
 app.delete('/admin/systems/:jcode', requireAdmin, (req, res) => {
   const J = (req.params.jcode || '').toUpperCase();
