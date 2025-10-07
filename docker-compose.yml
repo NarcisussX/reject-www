@@ -34,11 +34,11 @@ services:
     working_dir: /app
     command: ["node", "dist/server.js"]
     environment:
-    ADMIN_USER: $${ADMIN_USER}
-    ADMIN_PASS: $${ADMIN_PASS}
-    DISCORD_WEBHOOK_URL: $${DISCORD_WEBHOOK_URL}
-    DB_PATH: /data/reject.db
-    NODE_ENV: production
+      ADMIN_USER: $${ADMIN_USER}
+      ADMIN_PASS: $${ADMIN_PASS}
+      DISCORD_WEBHOOK_URL: $${DISCORD_WEBHOOK_URL}
+      DB_PATH: /data/reject.db
+      NODE_ENV: production
     volumes:
       - ./api:/app
       - reject_data:/data
