@@ -16,8 +16,8 @@ export default function Admin() {
         e.preventDefault()
         const body = {
             jcode: jcode.toUpperCase(),
-            ransomISK: Number(ransom),
-            structures: rows.map(r => ({ kind: r.kind, estimatedISK: Number(r.estimatedISK), fitText: r.fitText }))
+            ransomISK: ransom, // send raw
+            structures: rows.map(r => ({ kind: r.kind, estimatedISK: r.estimatedISK, fitText: r.fitText })) // send raw
         }
         const r = await fetch('/api/admin/systems', {
             method: 'POST',

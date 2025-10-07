@@ -31,7 +31,24 @@ CREATE TABLE IF NOT EXISTS structures (
 );
 `);
 
-const toISK = (n) => Number(n || 0);
+function parseISK(x) {
+  if (typeof x === 'number' && isFinite(x)) return Math.round(x);
+  const s = String(x ?? '').trim().toLowerCase().replace(/[, _]/g, '');
+  if (!s) return 0;
+  const m = s.match(/^(\d+(?:\.\d+)?)([kmb])?$/); // 1.2m, 900k, 1b
+  let n;
+  if (m) {
+    n = parseFloat(m[1]);
+    const suf = m[2];
+    if (suf === 'k') n *= 1e3;
+    if (suf === 'm') n *= 1e6;
+    if (suf === 'b') n *= 1e9;
+  } else {
+    n = Number(s); // raw digits like 1200000
+  }
+  if (!isFinite(n)) return 0;
+  return Math.round(n);
+}
 
 function getSystem(jcode) {
   const sys = db.prepare('SELECT * FROM systems WHERE jcode = ?').get(jcode);
@@ -41,10 +58,10 @@ function getSystem(jcode) {
       'SELECT kind, fit_text AS fitText, estimated_value_isk AS estimatedISK FROM structures WHERE system_id = ?'
     )
     .all(sys.id);
-  const totalStructuresISK = rows.reduce((a, r) => a + toISK(r.estimatedISK), 0);
+  const totalStructuresISK = rows.reduce((a, r) => a + parseISK(r.estimatedISK), 0)
   return {
     jcode: sys.jcode,
-    ransomISK: toISK(sys.ransom_isk),
+    ransomISK: parseISK(sys.ransom_isk),
     totalStructuresISK,
     structures: rows,
     pilot: 'Leshak Pilot 1',
@@ -99,12 +116,12 @@ app.post('/admin/systems', requireAdmin, (req, res) => {
   const tx = db.transaction(() => {
     const { lastInsertRowid } = db
       .prepare('INSERT INTO systems (jcode, ransom_isk) VALUES (?, ?)')
-      .run(J, toISK(ransomISK));
+      .run(J, parseISK(ransomISK))
     const stmt = db.prepare(
       'INSERT INTO structures (system_id, kind, fit_text, estimated_value_isk) VALUES (?,?,?,?)'
     );
     for (const s of structures || [])
-      stmt.run(lastInsertRowid, s.kind, s.fitText, toISK(s.estimatedISK));
+      stmt.run(lastInsertRowid, s.kind, s.fitText, parseISK(s.estimatedISK))
   });
 
   try { tx(); res.sendStatus(201); } catch { res.status(409).json({ error: 'Already exists?' }); }
@@ -118,13 +135,13 @@ app.put('/admin/systems/:jcode', requireAdmin, (req, res) => {
 
   const tx = db.transaction(() => {
     db.prepare('UPDATE systems SET ransom_isk = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .run(toISK(ransomISK), sys.id);
+      .run(parseISK(ransomISK), sys.id);
     db.prepare('DELETE FROM structures WHERE system_id = ?').run(sys.id);
     const stmt = db.prepare(
       'INSERT INTO structures (system_id, kind, fit_text, estimated_value_isk) VALUES (?,?,?,?)'
     );
     for (const s of structures || [])
-      stmt.run(sys.id, s.kind, s.fitText, toISK(s.estimatedISK));
+      stmt.run(sys.id, s.kind, s.fitText, parseISK(s.estimatedISK));
   });
 
   try { tx(); res.sendStatus(204); } catch { res.status(500).json({ error: 'Update failed' }); }
