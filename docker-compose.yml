@@ -27,10 +27,9 @@ services:
       - traefik.http.routers.www-apex.service=www
 
   api:
-    image: node:20-alpine
+    build:
+      context: ./api
     container_name: reject-api
-    working_dir: /app
-    command: ["node", "dist/server.js"]
     environment:
       ADMIN_USER: $${ADMIN_USER}
       ADMIN_PASS: $${ADMIN_PASS}

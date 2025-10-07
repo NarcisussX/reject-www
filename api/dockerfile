@@ -1,0 +1,14 @@
+FROM node:20-bookworm-slim
+WORKDIR /app
+
+# Install build deps for native modules, then purge
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY . .
+EXPOSE 4000
+CMD ["node","server.js"]
