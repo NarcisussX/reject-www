@@ -6,6 +6,7 @@ import App from "./App";
 import Home from "./pages/Home";
 import JCode from "./pages/JCode";
 import Admin from "./pages/Admin";
+import "./styles.css";
 
 const router = createBrowserRouter([
   {
