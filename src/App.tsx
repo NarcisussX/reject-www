@@ -17,7 +17,7 @@ export default function App() {
   }, [loc.pathname]);
 
   return (
-    <div className="min-h-dvh bg-black text-green-400 font-mono">
+    <div className="min-h-dvh flex flex-col bg-black text-green-400 font-mono">
       <GlobalStyles />
       <CRTOverlays />
 
@@ -34,12 +34,12 @@ export default function App() {
         </div>
       </header>
 
-      <main className="relative z-10">
+      <main className="flex-1">
         {/* Your pages (Home, JCode, Admin) render here */}
         <Outlet />
       </main>
 
-      <footer className="border-t border-green-500/20 mt-12">
+      <footer className="border-t border-green-500/20 py-6 text-center text-green-300/80">
         <div className="mx-auto max-w-6xl px-4 py-6 text-xs text-green-500/75">
           <div className="flex items-center justify-between gap-3">
             <p>© {new Date().getFullYear()} Rejected Applications Inc.</p>
