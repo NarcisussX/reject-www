@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-function copy(text: string) {
-    navigator.clipboard.writeText(text)
-}
-
+const copy = (t: string) => navigator.clipboard.writeText(t);
 
 type Structure = { kind: string; fitText: string; estimatedISK: number }
 
@@ -22,6 +19,8 @@ export default function JCode() {
     const [data, setData] = useState<Data | null>(null)
     const [missing, setMissing] = useState(false)
     const [negOpen, setNegOpen] = useState(false)
+    const [payOpen, setPayOpen] = useState(false);
+
 
 
     useEffect(() => {
@@ -67,12 +66,58 @@ export default function JCode() {
                     <div>Total Structure Value: <span className="font-bold">{data.totalStructuresISK.toLocaleString()} ISK</span></div>
                     <div className="mt-1">Ransom to withdraw: <span className="font-bold">{data.ransomISK.toLocaleString()} ISK</span></div>
                     <div className="mt-4 flex flex-wrap gap-2">
-                        <button onClick={() => { copy(data.pilot); copy(String(data.ransomISK)) }} className="px-4 py-2 bg-green-600 text-black font-bold rounded">Pay Ransom</button>
+                        <button
+                            onClick={() => setPayOpen(true)}
+                            className="px-4 py-2 bg-green-600 text-black font-bold rounded"
+                        >
+                            Pay Ransom
+                        </button>
+
                         <button onClick={() => setNegOpen(true)} className="px-4 py-2 border border-green-500/50 rounded hover:bg-green-600/10">Negotiate</button>
                     </div>
                 </div>
 
+                {payOpen && data && (
+                    <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 z-50">
+                        <div className="w-full max-w-md bg-black border border-green-500/50 rounded p-4">
+                            <h3 className="text-xl mb-3">Pay Ransom — {data.jcode}</h3>
 
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <div className="text-green-300/80 text-sm">Pay this character</div>
+                                        <div className="text-lg">Leshak Pilot 1</div>
+                                    </div>
+                                    <button
+                                        onClick={() => copy('Leshak Pilot 1')}
+                                        className="px-3 py-1.5 border border-green-500/40 rounded hover:bg-green-600/10"
+                                    >
+                                        Copy Name
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center justify-between gap-3">
+                                    <div>
+                                        <div className="text-green-300/80 text-sm">Amount</div>
+                                        <div className="text-lg">{data.ransomISK.toLocaleString()} ISK</div>
+                                    </div>
+                                    <button
+                                        onClick={() => copy(String(data.ransomISK))}
+                                        className="px-3 py-1.5 border border-green-500/40 rounded hover:bg-green-600/10"
+                                    >
+                                        Copy Amount
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="mt-4 flex justify-end">
+                                <button onClick={() => setPayOpen(false)} className="px-3 py-2 border border-green-500/40 rounded">
+                                    Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
                 {negOpen && <NegotiateModal jcode={data.jcode} onClose={() => setNegOpen(false)} />}
             </div>
         </div>
@@ -80,36 +125,70 @@ export default function JCode() {
 }
 
 
+
 function NegotiateModal({ jcode, onClose }: { jcode: string; onClose: () => void }) {
     const [ign, setIgn] = useState('')
     const [msg, setMsg] = useState('')
-    const [ok, setOk] = useState(false)
+    const [status, setStatus] = useState<"idle" | "ok" | "err">("idle");
 
 
     async function submit(e: React.FormEvent) {
-        e.preventDefault()
-        const r = await fetch('/api/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jcode, ign, message: msg }) })
-        setOk(r.ok)
+        e.preventDefault();
+        setStatus("idle");
+        const r = await fetch('/api/contact', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jcode, ign, message: msg }),
+        });
+        setStatus(r.ok ? "ok" : "err");
     }
 
 
+
     return (
-        <div className="fixed inset-0 bg-black/80 grid place-items-center p-4">
+        <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 z-50">
             <div className="w-full max-w-lg bg-black border border-green-500/50 rounded p-4">
                 <h3 className="text-xl">Negotiate — {jcode}</h3>
-                {ok ? (
-                    <div className="mt-4 text-green-300">Sent. We'll be in touch.</div>
+
+                {status === "ok" ? (
+                    <div className="mt-4 text-green-300">
+                        Sent. We’ll be in touch.
+                        <div className="mt-4 flex justify-end">
+                            <button onClick={onClose} className="px-3 py-2 border border-green-500/40 rounded">
+                                Close
+                            </button>
+                        </div>
+                    </div>
                 ) : (
                     <form onSubmit={submit} className="mt-3 space-y-3">
-                        <input value={ign} onChange={e => setIgn(e.target.value)} placeholder="In‑game name" className="w-full bg-black border border-green-500/40 rounded px-3 py-2" />
-                        <textarea value={msg} onChange={e => setMsg(e.target.value)} placeholder="Your message" rows={5} className="w-full bg-black border border-green-500/40 rounded px-3 py-2" />
+                        <input
+                            value={ign}
+                            onChange={e => setIgn(e.target.value)}
+                            placeholder="In-game name"
+                            className="w-full bg-black border border-green-500/40 rounded px-3 py-2"
+                        />
+                        <textarea
+                            value={msg}
+                            onChange={e => setMsg(e.target.value)}
+                            placeholder="Your message"
+                            rows={5}
+                            className="w-full bg-black border border-green-500/40 rounded px-3 py-2"
+                        />
+
+                        {/* ← PUT THE TWO LINES RIGHT HERE */}
+                        {status === "ok" && <div className="mt-3 text-green-300">Sent. We’ll be in touch.</div>}
+                        {status === "err" && <div className="mt-3 text-red-300">Failed to send. Check webhook config.</div>}
+
                         <div className="flex justify-end gap-2">
-                            <button type="button" onClick={onClose} className="px-3 py-2 border border-green-500/40 rounded">Close</button>
+                            <button type="button" onClick={onClose} className="px-3 py-2 border border-green-500/40 rounded">
+                                Close
+                            </button>
                             <button className="px-3 py-2 bg-green-600 text-black font-bold rounded">Send</button>
                         </div>
                     </form>
                 )}
             </div>
         </div>
-    )
+    );
+
 }

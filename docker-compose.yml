@@ -35,7 +35,7 @@ services:
     environment:
       ADMIN_USER: ${ADMIN_USER}
       ADMIN_PASS: ${ADMIN_PASS}
-      DISCORD_WEBHOOK_URL: $${DISCORD_WEBHOOK_URL}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
       DB_PATH: /data/reject.db
       NODE_ENV: production
     volumes:
