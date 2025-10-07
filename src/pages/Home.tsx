@@ -21,7 +21,7 @@ export default function Home() {
         </h1>
 
         <p className="mt-6 text-green-300/90 max-w-prose">
-          We relocate your assets so you don't have to! Ransoms always honored, check below if you qualify.
+          We relocate your assets so you don't have to! <br />Ransoms always honored, check below if you qualify.
         </p>
 
         <form onSubmit={submit} className="panel panel-solid mt-8">
