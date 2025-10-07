@@ -176,7 +176,7 @@ app.get('/admin/systems/:jcode', requireAdmin, (req, res) => {
 
   // Pull the system and its structures
   const sys = db.prepare(
-    'SELECT id, jcode, ransom_isk AS ransomISK, COALESCE(notes, "") AS notes FROM systems WHERE jcode = ?'
+    'SELECT id, jcode, ransom_isk AS ransomISK, COALESCE(notes, \'\') AS notes FROM systems WHERE jcode = ?'
   ).get(J);
 
   if (!sys) return res.sendStatus(404);
