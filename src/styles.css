@@ -152,3 +152,60 @@ button.ghost:hover{ background: rgba(39,243,118,.08); }
 
 /* ---------- Small helpers ---------- */
 .text-soft{ color: var(--crt-text-soft); }
+
+/* ===== GLOBAL CRT + MATRIX OVERLAYS (no component changes needed) ===== */
+
+/* Stronger glow helpers (optional) */
+.crt-glow { text-shadow: 0 0 6px rgba(39,243,118,.75), 0 0 22px rgba(39,243,118,.25); }
+
+/* Scanlines across the whole app */
+@keyframes crt-scanlines { to { background-position: 0 -3px; } }
+body::after{
+  content:"";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3; /* above bg & matrix, below header (which is sticky) */
+  opacity: .17;
+  background:
+    repeating-linear-gradient(0deg, rgba(0,255,120,.055) 0 1px, transparent 2px 4px);
+  animation: crt-scanlines 4s linear infinite;
+}
+
+/* Subtle vignette/halo (if you already have one, this just reinforces it) */
+body::before{
+  content:"";
+  position: fixed;
+  inset: -15vmax;
+  pointer-events: none;
+  z-index: 1;
+  background:
+    radial-gradient(1100px 600px at 55% -8%, rgba(39,243,118,.13), transparent 60%),
+    radial-gradient(900px 500px at 10% 115%, rgba(39,243,118,.08), transparent 65%);
+  filter: saturate(115%);
+}
+
+/* Matrix “rain” — CSS-only (line rain, lightweight & always visible) */
+@keyframes matrix-rain {
+  0%   { background-position: 0 -200%, 0 0; }
+  100% { background-position: 0 200%, 0 0; }
+}
+html::before{
+  content:"";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;             /* under scanlines, over page bg */
+  opacity: .18;           /* tweak to taste (.12 – .28) */
+  mix-blend-mode: screen;
+  /* vertical “glyph streaks” + faint horizontal grid */
+  background:
+    repeating-linear-gradient(180deg, rgba(39,243,118,.06) 0 18px, transparent 22px 40px),
+    repeating-linear-gradient(90deg, rgba(39,243,118,.03) 0 2px, transparent 6px 12px);
+  animation: matrix-rain 18s linear infinite;
+}
+
+/* Tiny cursor blink utility you can use anywhere */
+.crt-cursor { display:inline-block; width:.6ch; animation: blink 1.1s steps(1,end) infinite; }
+@keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+
