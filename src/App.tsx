@@ -1,33 +1,61 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useRef } from "react";
 
-/* --- Matrix Rain from your first iteration --- */
 function MatrixRain() {
   const ref = useRef<HTMLCanvasElement | null>(null);
+
   useEffect(() => {
     const c = ref.current!, x = c.getContext("2d")!;
     let w = (c.width = innerWidth), h = (c.height = innerHeight);
-    const fs = 16, cols = Math.floor(w / fs);
+
+    const fs = 16;                               // glyph size
+    let cols = Math.floor(w / fs);
+
     const chars = "アイウエオｱｲｳｴｵ0123456789#$%&*+-/<>".split("");
-    const drops = Array(cols).fill(0).map(() => Math.floor(Math.random() * h / fs));
-    const res = () => { w = c.width = innerWidth; h = c.height = innerHeight; };
-    addEventListener("resize", res);
-    let id = 0;
+    const drops = Array(cols).fill(0).map(() => Math.random() * h / fs);
+    const speed = Array(cols).fill(0).map(() => 0.25 + Math.random() * 0.35);
+    // ↑ global speed ≈ 0.25–0.6 rows per frame (slow). Bump numbers to make it faster.
+
+    const onResize = () => {
+      w = c.width = innerWidth;
+      h = c.height = innerHeight;
+      cols = Math.floor(w / fs);
+    };
+    addEventListener("resize", onResize);
+
+    let raf = 0;
     (function draw() {
-      id = requestAnimationFrame(draw);
-      x.fillStyle = "rgba(0,0,0,.08)"; x.fillRect(0, 0, w, h);
-      x.fillStyle = "#00ff66"; x.font = `${fs}px "Share Tech Mono", monospace`;
+      raf = requestAnimationFrame(draw);
+
+      // slightly stronger fade also calms the motion
+      x.fillStyle = "rgba(0,0,0,.10)";
+      x.fillRect(0, 0, w, h);
+
+      x.fillStyle = "#00ff66";
+      x.font = `${fs}px "Share Tech Mono", monospace`;
+
       for (let i = 0; i < cols; i++) {
         const t = chars[(Math.random() * chars.length) | 0];
         x.fillText(t, i * fs, drops[i] * fs);
-        if (drops[i] * fs > h && Math.random() > .975) drops[i] = 0;
-        drops[i]++;
+
+        if (drops[i] * fs > h && Math.random() > 0.975) {
+          drops[i] = 0;
+          speed[i] = 0.25 + Math.random() * 0.35; // new random slow speed for that column
+        }
+
+        drops[i] += speed[i]; // ← slower advance
       }
     })();
-    return () => { cancelAnimationFrame(id); removeEventListener("resize", res); };
+
+    return () => {
+      cancelAnimationFrame(raf);
+      removeEventListener("resize", onResize);
+    };
   }, []);
-  return <canvas className="matrix" ref={ref} />;
+
+  return <canvas className="matrix-canvas" ref={ref} />;
 }
+
 
 export default function App() {
   const loc = useLocation();

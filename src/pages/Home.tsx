@@ -27,7 +27,7 @@ export default function Home() {
           We relocate your assets. No motivation required beyond ISK. Buy us off with a ransom and we disappear.
         </p>
 
-        <form onSubmit={submit} className="panel mt-8">
+        <form onSubmit={submit} className="panel panel-solid mt-8">
           <label className="block text-green-300/80 mb-2">
             Are we reffing your structures? Camping your hole?
           </label>
@@ -44,7 +44,7 @@ export default function Home() {
           </div>
         </form>
 
-        <div className="panel mt-6">
+        <div className="panel panel-solid mt-6">
           <div className="term" style={{ maxHeight: 180 }}>
             <div className="row">Initializing eviction workflow… <span className="blink">_</span></div>
             <div className="row">Scanning local structures… Astrahus detected.</div>

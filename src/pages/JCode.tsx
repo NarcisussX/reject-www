@@ -50,10 +50,6 @@ export default function JCode() {
                 </Link>
               </div>
             </main>
-            <footer className="footer">
-              <div>© 2025 Rejected Applications Inc.</div>
-              <div>Asset Relocation Specialists — “We relocate your assets.”</div>
-            </footer>
           </div>
         </div>
       </div>
@@ -74,7 +70,7 @@ return (
       {/* stack sections with space */}
       <div className="space-y-6 md:space-y-8">
         {/* Ransom summary panel stays the same */}
-        <section className="panel ransom">
+        <section className="panel panel-solid ransom">
           <div className="kv">
             <div className="text-green-300/80">Total Value</div>
             <div className="font-bold">{data.totalStructuresISK.toLocaleString()} ISK</div>
@@ -88,7 +84,7 @@ return (
         </section>
 
         {!!data.notes?.trim() && (
-          <section className="panel">
+          <section className="panel panel-solid ">
             <h2 className="mb-2 glow text-lg">Notes</h2>
             <pre className="whitespace-pre-wrap text-green-300/90">{data.notes}</pre>
           </section>
@@ -97,7 +93,7 @@ return (
         {/* wider gaps between structure cards */}
         <section className="grid md:grid-cols-2 gap-6 md:gap-8">
           {data.structures.map((s, i) => (
-            <div key={i} className="panel">
+            <div key={i} className="panel panel-solid ">
               <div className="flex items-center justify-between">
                 <h3 className="glow text-xl">{s.kind}</h3>
                 <div className="text-green-300/90">~{s.estimatedISK.toLocaleString()} ISK</div>
