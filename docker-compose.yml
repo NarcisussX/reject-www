@@ -46,18 +46,6 @@ services:
       - tw_web
     restart: unless-stopped
 
-  hook:
-    build:
-      context: ./hook
-      dockerfile: Dockerfile
-    container_name: hook
-    restart: unless-stopped
-    environment:
-      DISCORD_WEBHOOK: "${DISCORD_WEBHOOK}"
-    networks:
-      - tw_web
-    # no ports and no Traefik labels → internal only
-
 networks:
   tw_web:
     external: true
