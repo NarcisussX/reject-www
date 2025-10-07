@@ -15,16 +15,13 @@ export default function Home() {
   return (
     <div className="bg-black text-green-400 font-mono">
       <div className="mx-auto max-w-4xl px-4 md:px-6 py-8 md:py-12">
-        <div className="text-xs tracking-widest text-green-300/70 mb-3">
-          REJECTED APPLICATIONS INC.
-        </div>
 
         <h1 className="glow text-5xl md:text-7xl leading-tight">
-          Asset<br/>Relocation<br/>Specialists
+          Asset Relocation<br/>Specialists
         </h1>
 
         <p className="mt-6 text-green-300/90 max-w-prose">
-          We relocate your assets. No motivation required beyond ISK. Buy us off with a ransom and we disappear.
+          We relocate your assets so you don't have to! Ransoms always honored, check below if you qualify.
         </p>
 
         <form onSubmit={submit} className="panel panel-solid mt-8">
@@ -43,15 +40,6 @@ export default function Home() {
             — Enter your J-code to view your personalized eviction ransom appraisal and next steps.
           </div>
         </form>
-
-        <div className="panel panel-solid mt-6">
-          <div className="term" style={{ maxHeight: 180 }}>
-            <div className="row">Initializing eviction workflow… <span className="blink">_</span></div>
-            <div className="row">Scanning local structures… Astrahus detected.</div>
-            <div className="row">Negotiation channel open. Ransom accepted in ISK only.</div>
-            <div className="row">Tip: Bring your wallet. Or bring content.</div>
-          </div>
-        </div>
       </div>
     </div>
   )
