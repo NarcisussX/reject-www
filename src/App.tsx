@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 
 /**
@@ -31,20 +31,6 @@ export default function App() {
             REJECTED APPLICATIONS INC.
             <span className="ml-1 crt-cursor">_</span>
           </Link>
-
-          <nav className="flex items-center gap-2 text-sm">
-            <NavItem to="/" label="Home" />
-            <NavItem to="/admin" label="Admin" />
-            <a
-              href="https://map.reject.app"
-              target="_blank"
-              rel="noreferrer"
-              className="px-3 py-1.5 rounded border border-green-500/25 hover:bg-green-600/10 text-green-300 hover:text-green-200"
-              aria-label="Open Tripwire map"
-            >
-              Map
-            </a>
-          </nav>
         </div>
       </header>
 
@@ -62,26 +48,6 @@ export default function App() {
         </div>
       </footer>
     </div>
-  );
-}
-
-/** Nav link with active state */
-function NavItem({ to, label }: { to: string; label: string }) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        [
-          "px-3 py-1.5 rounded border",
-          isActive
-            ? "border-green-400 bg-green-600/15 text-green-200"
-            : "border-green-500/25 hover:bg-green-600/10 text-green-300 hover:text-green-200",
-        ].join(" ")
-      }
-      end
-    >
-      {label}
-    </NavLink>
   );
 }
 

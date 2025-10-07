@@ -36,7 +36,7 @@ export default function JCode() {
 
     if (missing)
         return (
-            <div className="min-h-dvh bg-black text-green-400 font-mono grid place-items-center p-6">
+            <div className="min-h-full flex items-center justify-center p-6">
                 <div className="max-w-xl text-center">
                     <h2 className="text-3xl">We aren't in your hole... yet!</h2>
                     <p className="mt-4 text-green-300/80">
