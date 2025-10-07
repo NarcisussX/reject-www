@@ -170,6 +170,32 @@ app.post('/admin/systems', requireAdmin, (req, res) => {
 });
 
 
+// GET one system for Admin (requires basic auth)
+app.get('/admin/systems/:jcode', requireAdmin, (req, res) => {
+  const J = String(req.params.jcode || '').toUpperCase();
+
+  // Pull the system and its structures
+  const sys = db.prepare(
+    'SELECT id, jcode, ransom_isk AS ransomISK, COALESCE(notes, "") AS notes FROM systems WHERE jcode = ?'
+  ).get(J);
+
+  if (!sys) return res.sendStatus(404);
+
+  const structures = db.prepare(
+    'SELECT kind, fit_text AS fitText, estimated_value_isk AS estimatedISK FROM structures WHERE system_id = ?'
+  ).all(sys.id);
+
+  const totalStructuresISK = structures.reduce((a, s) => a + (Number(s.estimatedISK) || 0), 0);
+
+  // Shape the JSON exactly how the Admin editor expects
+  res.json({
+    jcode: sys.jcode,
+    ransomISK: Number(sys.ransomISK),
+    notes: sys.notes || '',
+    totalStructuresISK,
+    structures
+  });
+});
 
 // PUT update: include notes
 app.put('/admin/systems/:jcode', requireAdmin, (req, res) => {
