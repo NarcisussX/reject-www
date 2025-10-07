@@ -45,7 +45,7 @@ services:
     networks:
       - tw_web
     restart: unless-stopped
-    
+
   hook:
     build:
       context: ./hook
@@ -63,5 +63,5 @@ networks:
     external: true
     name: tw_web
 
-  volumes:
-    reject_data:
+volumes:
+  reject_data:
