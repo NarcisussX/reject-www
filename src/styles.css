@@ -1,14 +1,6 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
-  --bg: #000;
-  --fg: #00ff66;
-  --fg-dim: #1aff7a;
-  --accent: #39ff14;
-  --danger: #ff3b3b;
-}
+:root { color-scheme: dark; }
 
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; }
