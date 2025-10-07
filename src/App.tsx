@@ -4,40 +4,29 @@ import { useEffect, useRef } from "react";
 /* --- Matrix Rain from your first iteration --- */
 function MatrixRain() {
   const ref = useRef<HTMLCanvasElement | null>(null);
-
   useEffect(() => {
     const c = ref.current!, x = c.getContext("2d")!;
     let w = (c.width = innerWidth), h = (c.height = innerHeight);
-
-    const fs = 16;                                 // font size
-    const cols = Math.floor(w / fs);
-    const chars = "アイウエオｱｲｳｴｵ0123456789#$%&*+-/<>".split("/");
+    const fs = 16, cols = Math.floor(w / fs);
+    const chars = "アイウエオｱｲｳｴｵ0123456789#$%&*+-/<>".split("");
     const drops = Array(cols).fill(0).map(() => Math.floor(Math.random() * h / fs));
-
-    const onResize = () => { w = c.width = innerWidth; h = c.height = innerHeight; };
-    addEventListener("resize", onResize);
-
+    const res = () => { w = c.width = innerWidth; h = c.height = innerHeight; };
+    addEventListener("resize", res);
     let id = 0;
     (function draw() {
       id = requestAnimationFrame(draw);
-      x.fillStyle = "rgba(0,0,0,.08)";  // fade trail
-      x.fillRect(0, 0, w, h);
-
-      x.fillStyle = "#00ff66";
-      x.font = `${fs}px "Share Tech Mono", monospace`;
-
+      x.fillStyle = "rgba(0,0,0,.08)"; x.fillRect(0, 0, w, h);
+      x.fillStyle = "#00ff66"; x.font = `${fs}px "Share Tech Mono", monospace`;
       for (let i = 0; i < cols; i++) {
         const t = chars[(Math.random() * chars.length) | 0];
-        x.fillText(t as any, i * fs, drops[i] * fs);
-        if (drops[i] * fs > h && Math.random() > 0.975) drops[i] = 0;
+        x.fillText(t, i * fs, drops[i] * fs);
+        if (drops[i] * fs > h && Math.random() > .975) drops[i] = 0;
         drops[i]++;
       }
     })();
-
-    return () => { cancelAnimationFrame(id); removeEventListener("resize", onResize); };
+    return () => { cancelAnimationFrame(id); removeEventListener("resize", res); };
   }, []);
-
-  return <canvas ref={ref} className="matrix-canvas" />;
+  return <canvas className="matrix" ref={ref} />;
 }
 
 export default function App() {
