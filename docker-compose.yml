@@ -24,7 +24,28 @@ services:
       - traefik.http.routers.www-apex.entrypoints=websecure
       - traefik.http.routers.www-apex.tls=true
       - traefik.http.routers.www-apex.service=www
+  web:
+    depends_on:
+      - api
 
+  api:
+    image: node:20-alpine
+    container_name: reject-api
+    working_dir: /app
+    command: ["node", "dist/server.js"]
+    environment:
+    ADMIN_USER: $${ADMIN_USER}
+    ADMIN_PASS: $${ADMIN_PASS}
+    DISCORD_WEBHOOK_URL: $${DISCORD_WEBHOOK_URL}
+    DB_PATH: /data/reject.db
+    NODE_ENV: production
+    volumes:
+      - ./api:/app
+      - reject_data:/data
+    networks:
+      - tw_web
+    restart: unless-stopped
+    
   hook:
     build:
       context: ./hook
@@ -41,3 +62,6 @@ networks:
   tw_web:
     external: true
     name: tw_web
+
+  volumes:
+    reject_data:
