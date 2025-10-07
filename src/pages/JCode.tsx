@@ -127,30 +127,26 @@ export default function JCode() {
 
 
 function NegotiateModal({ jcode, onClose }: { jcode: string; onClose: () => void }) {
-    const [ign, setIgn] = useState('')
-    const [msg, setMsg] = useState('')
-    const [status, setStatus] = useState<"idle" | "ok" | "err">("idle");
-
+    const [ign, setIgn] = useState('');
+    const [msg, setMsg] = useState('');
+    const [status, setStatus] = useState<'idle' | 'ok' | 'err'>('idle'); // <-- include "ok"
 
     async function submit(e: React.FormEvent) {
         e.preventDefault();
-        setStatus("idle");
         const r = await fetch('/api/contact', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ jcode, ign, message: msg }),
         });
-        setStatus(r.ok ? "ok" : "err");
+        setStatus(r.ok ? 'ok' : 'err');
     }
-
-
 
     return (
         <div className="fixed inset-0 flex items-center justify-center p-4 bg-black/80 z-50">
             <div className="w-full max-w-lg bg-black border border-green-500/50 rounded p-4">
                 <h3 className="text-xl">Negotiate — {jcode}</h3>
 
-                {status === "ok" ? (
+                {status === 'ok' ? (
                     <div className="mt-4 text-green-300">
                         Sent. We’ll be in touch.
                         <div className="mt-4 flex justify-end">
@@ -175,9 +171,10 @@ function NegotiateModal({ jcode, onClose }: { jcode: string; onClose: () => void
                             className="w-full bg-black border border-green-500/40 rounded px-3 py-2"
                         />
 
-                        {/* ← PUT THE TWO LINES RIGHT HERE */}
-                        {status === "ok" && <div className="mt-3 text-green-300">Sent. We’ll be in touch.</div>}
-                        {status === "err" && <div className="mt-3 text-red-300">Failed to send. Check webhook config.</div>}
+                        {/* Only show error while on the form */}
+                        {status === 'err' && (
+                            <div className="mt-3 text-red-300">Failed to send. Check webhook config.</div>
+                        )}
 
                         <div className="flex justify-end gap-2">
                             <button type="button" onClick={onClose} className="px-3 py-2 border border-green-500/40 rounded">
@@ -190,5 +187,5 @@ function NegotiateModal({ jcode, onClose }: { jcode: string; onClose: () => void
             </div>
         </div>
     );
-
 }
+

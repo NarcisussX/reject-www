@@ -1,16 +1,12 @@
 @import "tailwindcss";
 
 :root { color-scheme: dark; }
+/* Ensure pages can scroll */
+html, body, #root { min-height: 100%; height: auto; }
+body { overflow-y: auto; }
 
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; }
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--fg);
-  font-family: "Share Tech Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  overflow: hidden;
-}
+/* optional: if some old template set it */
+#root { overflow: visible; }
 
 /* layout + max width ~800px */
 .screen { position: relative; width: 100%; height: 100%; }
