@@ -114,18 +114,28 @@ app.post('/admin/systems', requireAdmin, (req, res) => {
   if (!/^J\d{6}$/.test(J)) return res.status(400).json({ error: 'Invalid J-code' });
 
   const tx = db.transaction(() => {
-    const { lastInsertRowid } = db
-      .prepare('INSERT INTO systems (jcode, ransom_isk) VALUES (?, ?)')
-      .run(J, parseISK(ransomISK))
-    const stmt = db.prepare(
-      'INSERT INTO structures (system_id, kind, fit_text, estimated_value_isk) VALUES (?,?,?,?)'
-    );
-    for (const s of structures || [])
-      stmt.run(lastInsertRowid, s.kind, s.fitText, parseISK(s.estimatedISK))
+    db.prepare(`
+      INSERT INTO systems (jcode, ransom_isk)
+      VALUES (?, ?)
+      ON CONFLICT(jcode) DO UPDATE SET
+        ransom_isk = excluded.ransom_isk,
+        updated_at = CURRENT_TIMESTAMP
+    `).run(J, parseISK(ransomISK));
+
+    const { id } = db.prepare('SELECT id FROM systems WHERE jcode = ?').get(J);
+    db.prepare('DELETE FROM structures WHERE system_id = ?').run(id);
+    const ins = db.prepare(`
+      INSERT INTO structures (system_id, kind, fit_text, estimated_value_isk)
+      VALUES (?,?,?,?)
+    `);
+    for (const s of structures || []) {
+      ins.run(id, s.kind, s.fitText, parseISK(s.estimatedISK));
+    }
   });
 
-  try { tx(); res.sendStatus(201); } catch { res.status(409).json({ error: 'Already exists?' }); }
+  try { tx(); res.sendStatus(201); } catch { res.status(500).json({ error: 'Upsert failed' }); }
 });
+
 
 app.put('/admin/systems/:jcode', requireAdmin, (req, res) => {
   const J = (req.params.jcode || '').toUpperCase();
@@ -158,6 +168,41 @@ app.delete('/admin/systems/:jcode', requireAdmin, (req, res) => {
   const r = db.prepare('DELETE FROM systems WHERE jcode = ?').run(J);
   if (!r.changes) return res.sendStatus(404);
   res.sendStatus(204);
+});
+
+// GET /api/admin/systems?search=J12  (optional search)
+app.get('/admin/systems', requireAdmin, (req, res) => {
+  const search = (req.query.search || '').toString().trim().toUpperCase();
+  const like = `%${search}%`;
+
+  const rows = search
+    ? db.prepare(`
+        SELECT s.jcode,
+               s.ransom_isk AS ransomISK,
+               s.created_at,
+               s.updated_at,
+               COUNT(t.id) AS structuresCount,
+               COALESCE(SUM(t.estimated_value_isk), 0) AS totalStructuresISK
+        FROM systems s
+        LEFT JOIN structures t ON t.system_id = s.id
+        WHERE s.jcode LIKE ?
+        GROUP BY s.id
+        ORDER BY s.updated_at DESC, s.created_at DESC
+      `).all(like)
+    : db.prepare(`
+        SELECT s.jcode,
+               s.ransom_isk AS ransomISK,
+               s.created_at,
+               s.updated_at,
+               COUNT(t.id) AS structuresCount,
+               COALESCE(SUM(t.estimated_value_isk), 0) AS totalStructuresISK
+        FROM systems s
+        LEFT JOIN structures t ON t.system_id = s.id
+        GROUP BY s.id
+        ORDER BY s.updated_at DESC, s.created_at DESC
+      `).all();
+
+  res.json(rows);
 });
 
 // ---- Start server ----

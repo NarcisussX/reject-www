@@ -1,62 +1,351 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react';
 
+type ListItem = {
+  jcode: string;
+  ransomISK: number;
+  structuresCount: number;
+  totalStructuresISK: number;
+  created_at: string;
+  updated_at: string;
+};
+
+type Row = { kind: string; estimatedISK: string; fitText: string };
+
+const AUTH_KEY = 'reject.admin.auth'; // base64 "user:pass" in sessionStorage
 
 export default function Admin() {
-    const [auth, setAuth] = useState({ u: '', p: '' })
-    const [jcode, setJ] = useState('')
-    const [ransom, setR] = useState('')
-    const [rows, setRows] = useState([{ kind: 'Astrahus', estimatedISK: '0', fitText: '' }])
+  const [authB64, setAuthB64] = useState<string | null>(() => sessionStorage.getItem(AUTH_KEY));
+  const [list, setList] = useState<ListItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
 
+  const authedFetch = useMemo(() => {
+    return async (path: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers || {});
+      if (authB64) headers.set('Authorization', 'Basic ' + authB64);
+      const res = await fetch(`/api${path}`, { ...init, headers });
+      return res;
+    };
+  }, [authB64]);
 
-    function addRow() { setRows([...rows, { kind: 'Athanor', estimatedISK: '0', fitText: '' }]) }
-    function rmRow(i: number) { setRows(rows.filter((_, idx) => idx !== i)) }
-
-
-    async function save(e: React.FormEvent) {
-        e.preventDefault()
-        const body = {
-            jcode: jcode.toUpperCase(),
-            ransomISK: ransom, // send raw
-            structures: rows.map(r => ({ kind: r.kind, estimatedISK: r.estimatedISK, fitText: r.fitText })) // send raw
-        }
-        const r = await fetch('/api/admin/systems', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Basic ' + btoa(auth.u + ':' + auth.p) },
-            body: JSON.stringify(body)
-        })
-        alert(r.ok ? 'Saved' : 'Failed')
+  async function loadList(q = '') {
+    setLoading(true);
+    try {
+      const res = await authedFetch(`/admin/systems${q ? `?search=${encodeURIComponent(q)}` : ''}`);
+      if (res.status === 401 || res.status === 403) {
+        setAuthB64(null);
+        sessionStorage.removeItem(AUTH_KEY);
+        return;
+      }
+      const data = (await res.json()) as ListItem[];
+      setList(data);
+    } finally {
+      setLoading(false);
     }
+  }
 
+  useEffect(() => {
+    if (authB64) loadList();
+  }, [authB64]);
 
-    return (
-        <div className="min-h-dvh bg-black text-green-400 font-mono p-6">
-            <h1 className="text-2xl">Admin — Add System</h1>
-            <form onSubmit={save} className="mt-4 space-y-3">
-                <div className="grid md:grid-cols-3 gap-3">
-                    <input placeholder="Admin user" value={auth.u} onChange={e => setAuth(a => ({ ...a, u: e.target.value }))} className="bg-black border border-green-500/40 rounded px-3 py-2" />
-                    <input placeholder="Admin pass" type="password" value={auth.p} onChange={e => setAuth(a => ({ ...a, p: e.target.value }))} className="bg-black border border-green-500/40 rounded px-3 py-2" />
-                </div>
-                <div className="grid md:grid-cols-3 gap-3">
-                    <input placeholder="J-code (J123456)" value={jcode} onChange={e => setJ(e.target.value)} className="bg-black border border-green-500/40 rounded px-3 py-2" />
-                    <input placeholder="Ransom ISK" value={ransom} onChange={e => setR(e.target.value)} className="bg-black border border-green-500/40 rounded px-3 py-2" />
-                </div>
-                <div className="space-y-3">
-                    {rows.map((r, i) => (
-                        <div key={i} className="border border-green-500/30 rounded p-3 grid md:grid-cols-3 gap-2">
-                            <input value={r.kind} onChange={e => setRows(rs => rs.map((x, idx) => idx === i ? { ...x, kind: e.target.value } : x))} placeholder="Structure Kind" className="bg-black border border-green-500/40 rounded px-3 py-2" />
-                            <input value={r.estimatedISK} onChange={e => setRows(rs => rs.map((x, idx) => idx === i ? { ...x, estimatedISK: e.target.value } : x))} placeholder="Estimated ISK" className="bg-black border border-green-500/40 rounded px-3 py-2" />
-                            <textarea value={r.fitText} onChange={e => setRows(rs => rs.map((x, idx) => idx === i ? { ...x, fitText: e.target.value } : x))} placeholder="Paste fit" className="bg-black border border-green-500/40 rounded px-3 py-2 md:col-span-3" rows={4} />
-                            <div className="md:col-span-3 flex justify-end gap-2">
-                                <button type="button" onClick={() => rmRow(i)} className="px-3 py-2 border border-green-500/40 rounded">Remove</button>
-                                {i === rows.length - 1 && <button type="button" onClick={addRow} className="px-3 py-2 bg-green-600 text-black rounded">Add Row</button>}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="flex justify-end">
-                    <button className="px-4 py-2 bg-green-600 text-black font-bold rounded">Save System</button>
-                </div>
-            </form>
+  if (!authB64) return <Login onAuthed={setAuthB64} />;
+
+  return (
+    <div className="min-h-dvh bg-black text-green-400 font-mono p-6">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-2xl">Admin — Ransom Appraisals</h1>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => loadList(search)}
+              className="px-3 py-2 border border-green-500/40 rounded hover:bg-green-600/10"
+            >
+              Refresh
+            </button>
+            <button
+              onClick={() => { sessionStorage.removeItem(AUTH_KEY); setAuthB64(null); }}
+              className="px-3 py-2 border border-red-500/40 text-red-300 rounded hover:bg-red-600/10"
+            >
+              Log out
+            </button>
+          </div>
         </div>
-    )
+
+        {/* Search + New */}
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search J-code (e.g., J123)"
+            className="bg-black border border-green-500/40 rounded px-3 py-2"
+          />
+          <button
+            onClick={() => loadList(search)}
+            className="px-3 py-2 bg-green-600 text-black font-bold rounded"
+          >
+            Search
+          </button>
+          <button
+            onClick={() => setEditing({ jcode: '', ransomISK: '', rows: [emptyRow()] })}
+            className="px-3 py-2 border border-green-500/40 rounded hover:bg-green-600/10"
+          >
+            New System
+          </button>
+        </div>
+
+        {/* List */}
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full text-left border border-green-500/20 rounded overflow-hidden">
+            <thead className="bg-green-900/20">
+              <tr className="[&>th]:px-3 [&>th]:py-2">
+                <th>J-code</th>
+                <th>Ransom ISK</th>
+                <th># Structures</th>
+                <th>Total Structures ISK</th>
+                <th>Updated</th>
+                <th className="text-right pr-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="[&>tr>td]:px-3 [&>tr>td]:py-2">
+              {loading ? (
+                <tr><td colSpan={6} className="text-center text-green-300/70">Loading…</td></tr>
+              ) : list.length === 0 ? (
+                <tr><td colSpan={6} className="text-center text-green-300/70">No systems</td></tr>
+              ) : (
+                list.map(item => (
+                  <tr key={item.jcode} className="border-t border-green-500/10">
+                    <td className="font-bold">{item.jcode}</td>
+                    <td>{fmtISK(item.ransomISK)}</td>
+                    <td>{item.structuresCount}</td>
+                    <td>{fmtISK(item.totalStructuresISK)}</td>
+                    <td className="text-green-300/70">{new Date(item.updated_at || item.created_at).toLocaleString()}</td>
+                    <td className="text-right">
+                      <button
+                        onClick={() => edit(item.jcode)}
+                        className="px-2 py-1 border border-green-500/40 rounded hover:bg-green-600/10 mr-2"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => del(item.jcode)}
+                        className="px-2 py-1 border border-red-500/40 text-red-300 rounded hover:bg-red-600/10"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Editor */}
+        <Editor
+          authedFetch={authedFetch}
+          onSaved={() => loadList(search)}
+        />
+      </div>
+    </div>
+  );
 }
+
+/* ---------------- Login ---------------- */
+
+function Login({ onAuthed }: { onAuthed: (b64: string) => void }) {
+  const [u, setU] = useState('');
+  const [p, setP] = useState('');
+  const [err, setErr] = useState('');
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr('');
+    const b64 = btoa(`${u}:${p}`);
+    // Probe a cheap authed endpoint
+    const r = await fetch('/api/admin/systems', { headers: { Authorization: 'Basic ' + b64 } });
+    if (r.status === 401 || r.status === 403) {
+      setErr('Invalid credentials');
+      return;
+    }
+    sessionStorage.setItem(AUTH_KEY, b64);
+    onAuthed(b64);
+  }
+
+  return (
+    <div className="min-h-dvh bg-black text-green-400 font-mono grid place-items-center p-6">
+      <form onSubmit={submit} className="w-full max-w-sm border border-green-500/40 rounded p-4 bg-black">
+        <h1 className="text-xl mb-3">Admin login</h1>
+        <input value={u} onChange={e=>setU(e.target.value)} placeholder="User" className="w-full bg-black border border-green-500/40 rounded px-3 py-2 mb-2" />
+        <input value={p} onChange={e=>setP(e.target.value)} placeholder="Password" type="password" className="w-full bg-black border border-green-500/40 rounded px-3 py-2" />
+        {err && <div className="mt-2 text-red-300">{err}</div>}
+        <div className="mt-3 flex justify-end">
+          <button className="px-3 py-2 bg-green-600 text-black font-bold rounded">Enter</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* ---------------- Editor ---------------- */
+
+function emptyRow(): Row {
+  return { kind: 'Astrahus', estimatedISK: '', fitText: '' };
+}
+
+function fmtISK(n: number) {
+  return `${(n||0).toLocaleString()} ISK`;
+}
+
+function Editor({ authedFetch, onSaved }: {
+  authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
+  onSaved: () => void;
+}) {
+  const [editing, setEditing] = useState<{ jcode: string; ransomISK: string; rows: Row[] } | null>(null);
+  // expose handlers via closure (used by parent buttons)
+  (window as any).setEditing = setEditing; // optional: remove if you don’t use externally
+
+  async function edit(jcode: string) {
+    const r = await authedFetch(`/admin/systems/${jcode}`);
+    if (r.ok) {
+      const data = await r.json();
+      setEditing({
+        jcode: data.jcode,
+        ransomISK: String(data.ransomISK || ''),
+        rows: (data.structures || []).map((s: any) => ({
+          kind: s.kind, estimatedISK: String(s.estimatedISK || ''), fitText: s.fitText
+        })),
+      });
+    }
+  }
+  (window as any).edit = edit;
+
+  async function del(jcode: string) {
+    if (!confirm(`Delete ${jcode}?`)) return;
+    const r = await authedFetch(`/admin/systems/${jcode}`, { method: 'DELETE' });
+    if (r.ok) onSaved();
+  }
+  (window as any).del = del;
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    const body = {
+      jcode: editing.jcode.toUpperCase(),
+      ransomISK: editing.ransomISK,                 // send raw, server parses
+      structures: editing.rows.map(r => ({
+        kind: r.kind,
+        estimatedISK: r.estimatedISK,              // raw string (supports 1.2b, 900m, 150k)
+        fitText: r.fitText,
+      })),
+    };
+    // Prefer POST upsert; if 404/409, attempt PUT
+    let r = await authedFetch('/admin/systems', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) {
+      r = await authedFetch(`/admin/systems/${body.jcode}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    }
+    if (r.ok) {
+      setEditing(null);
+      onSaved();
+    } else {
+      alert('Save failed');
+    }
+  }
+
+  if (!editing) return null;
+
+  return (
+    <div className="mt-8 border border-green-500/30 rounded p-4 bg-black">
+      <h2 className="text-xl">Edit — {editing.jcode || 'New'}</h2>
+      <form onSubmit={save} className="mt-4 space-y-3">
+        <div className="grid md:grid-cols-3 gap-3">
+          <input
+            value={editing.jcode}
+            onChange={e => setEditing(v => v ? { ...v, jcode: e.target.value } : v)}
+            placeholder="J-code (J123456)"
+            className="bg-black border border-green-500/40 rounded px-3 py-2"
+          />
+          <input
+            value={editing.ransomISK}
+            onChange={e => setEditing(v => v ? { ...v, ransomISK: e.target.value } : v)}
+            placeholder="Ransom (e.g., 1.2b, 900m)"
+            className="bg-black border border-green-500/40 rounded px-3 py-2"
+          />
+          <div className="text-green-300/70 self-center">Supports k/m/b and commas</div>
+        </div>
+
+        <div className="space-y-3">
+          {editing.rows.map((r, i) => (
+            <div key={i} className="border border-green-500/30 rounded p-3 grid md:grid-cols-3 gap-2">
+              <input
+                value={r.kind}
+                onChange={e => setEditing(v => {
+                  const rows = v!.rows.slice(); rows[i] = { ...rows[i], kind: e.target.value }; return { ...v!, rows };
+                })}
+                placeholder="Structure Kind"
+                className="bg-black border border-green-500/40 rounded px-3 py-2"
+              />
+              <input
+                value={r.estimatedISK}
+                onChange={e => setEditing(v => {
+                  const rows = v!.rows.slice(); rows[i] = { ...rows[i], estimatedISK: e.target.value }; return { ...v!, rows };
+                })}
+                placeholder="Estimated ISK (e.g., 900m)"
+                className="bg-black border border-green-500/40 rounded px-3 py-2"
+              />
+              <textarea
+                value={r.fitText}
+                onChange={e => setEditing(v => {
+                  const rows = v!.rows.slice(); rows[i] = { ...rows[i], fitText: e.target.value }; return { ...v!, rows };
+                })}
+                placeholder="Paste fit"
+                className="bg-black border border-green-500/40 rounded px-3 py-2 md:col-span-3"
+                rows={4}
+              />
+              <div className="md:col-span-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditing(v => {
+                    const rows = v!.rows.slice(); rows.splice(i, 1); return { ...v!, rows: rows.length ? rows : [emptyRow()] };
+                  })}
+                  className="px-3 py-2 border border-green-500/40 rounded"
+                >
+                  Remove
+                </button>
+                {i === editing.rows.length - 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setEditing(v => ({ ...v!, rows: [...v!.rows, emptyRow()] }))}
+                    className="px-3 py-2 bg-green-600 text-black rounded"
+                  >
+                    Add Row
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={() => setEditing(null)} className="px-4 py-2 border border-green-500/40 rounded">
+            Cancel
+          </button>
+          <button className="px-4 py-2 bg-green-600 text-black font-bold rounded">
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+/* expose helpers so the list buttons can call edit/del via window (already wired in this file) */
+function edit(jcode: string) { (window as any).edit?.(jcode); }
+function del(jcode: string) { (window as any).del?.(jcode); }
