@@ -30,6 +30,68 @@ type AgeResp = {
     highISO: string;
     daysWide: string;
 };
+function InfoBox() {
+    return (
+        <details className="mt-8 bg-black/50 border border-green-500/20 rounded-lg p-4 open:shadow-[0_0_0_1px_rgba(16,185,129,0.2)]">
+            <summary className="cursor-pointer text-green-300 font-semibold select-none">
+                How this estimate works (click to expand)
+            </summary>
+
+            <div className="mt-3 text-sm leading-6 text-green-200/90 space-y-3">
+                <p>
+                    <b>Data source</b>: a cleaned, monotone index of ESI Public Structure ID dates
+                    (structure <i>ID → date</i>). Cleaning enforces non-decreasing dates by ID and can create
+                    plateaus (many IDs sharing the same day).
+                </p>
+
+                <ol className="list-decimal pl-5 space-y-2">
+                    <li>
+                        <b>Nearest neighbors</b>: I binary-search the two IDs that bracket your input{" "}
+                        <code>S</code>, i.e. <code>L ≤ S ≤ H</code>.
+                    </li>
+                    <li>
+                        <b>Exact hit</b>: if <code>S</code> exists in the index, I return that day with a{" "}
+                        <b>±3&nbsp;day</b> band (<code>method = "exact"</code>).
+                    </li>
+                    <li>
+                        <b>Interpolation</b>: otherwise I linearly interpolate between the neighbors’ dates:
+                        <br />
+                        <code>α = (S − L) / (H − L)</code>,{" "}
+                        <code>t = t<sub>L</sub> + α · (t<sub>H</sub> − t<sub>L</sub>)</code>{" "}
+                        (<code>method = "interpolate"</code>).
+                    </li>
+                    <li>
+                        <b>Uncertainty window</b>: I pad around <code>t</code> using the local gap so dense
+                        regions get tight windows and sparse/plateau regions get looser ones:
+                        <br />
+                        <code>pad = clamp(0.25 × |t<sub>H</sub> − t<sub>L</sub>|, 2d, 7d)</code>
+                        <br />
+                        Final range: <code>[t − pad, t + pad]</code>.
+                    </li>
+                    <li>
+                        <b>Edges</b>: if I only have one neighbor, I extrapolate from the closest two points
+                        and use a <b>±7&nbsp;day</b> window
+                        (<code>method = "extrapolate-head/tail"</code>).
+                    </li>
+                </ol>
+
+                <p>
+                    <b>Why results can differ from memory</b>: “First seen” reflects when a structure became
+                    publicly visible and was observed by the crawler. If a structure was anchored{" "}
+                    <i>private</i> and flipped to public later, the source date is later than the true
+                    anchor. Cleaning also flattens obvious inconsistencies, and times are normalized to
+                    00:00:00 <b>UTC</b>.
+                </p>
+
+                <p className="text-green-300/90">
+                    <b>Disclaimer</b>: This tool produces <i>estimates</i> only. It’s not an official anchor
+                    time and may be off—especially for late-public structures, sparse regions of the index, or
+                    data not yet covered by the source.
+                </p>
+            </div>
+        </details>
+    );
+}
 
 export default function StructureAge() {
     const [id, setId] = useState("");
@@ -93,6 +155,7 @@ export default function StructureAge() {
 
                 </div>
             )}
+            <InfoBox />
         </div>
     );
 }
