@@ -20,7 +20,7 @@ export default function StructureAge() {
     e.preventDefault();
     setErr(null); setData(null); setLoading(true);
     try {
-      const r = await fetch(`/age/${encodeURIComponent(id.trim())}`);
+      const r = await fetch(`/api/age/${encodeURIComponent(id.trim())}`);
       const j = await r.json();
       if (!r.ok) throw new Error(j?.error || `HTTP ${r.status}`);
       setData(j);
