@@ -7,6 +7,7 @@ type ListItem = {
     totalStructuresISK: number;
     created_at: string;
     updated_at: string;
+    evicted?: number | boolean;
 };
 
 type Row = { kind: string; estimatedISK: string; fitText: string };
@@ -68,6 +69,18 @@ export default function Admin() {
                 fitText: s.fitText,
             })),
         });
+    }
+    async function toggleEvicted(item: ListItem, next: boolean) {
+        const r = await authedFetch(`/admin/systems/${item.jcode}/evicted`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ evicted: next }),
+        });
+        if (r.ok) {
+            setList(list => list.map(x => x.jcode === item.jcode ? { ...x, evicted: next } : x));
+        } else {
+            alert('Failed to update evicted flag');
+        }
     }
 
     async function handleDelete(jcode: string) {
@@ -168,6 +181,17 @@ export default function Admin() {
                                             ).toLocaleString()}
                                         </td>
                                         <td className="text-right">
+                                            <label className="inline-flex items-center gap-2 mr-3 align-middle">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!item.evicted}
+                                                    onChange={(e) => toggleEvicted(item, e.target.checked)}
+                                                    className="accent-red-500"
+                                                    title="Mark as evicted"
+                                                />
+                                                <span className="text-red-300/80 text-xs uppercase tracking-wide">evicted</span>
+                                            </label>
+
                                             <button
                                                 onClick={() => startEdit(item.jcode)}
                                                 className="px-2 py-1 border border-green-500/40 rounded hover:bg-green-600/10 mr-2"
@@ -181,6 +205,7 @@ export default function Admin() {
                                                 Delete
                                             </button>
                                         </td>
+
                                     </tr>
                                 ))
                             )}

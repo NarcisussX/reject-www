@@ -1,5 +1,5 @@
 // Load env vars if dotenv is present (optional in prod)
-try { await import('dotenv/config'); } catch {}
+try { await import('dotenv/config'); } catch { }
 
 import express from 'express';
 import helmet from 'helmet';
@@ -36,13 +36,21 @@ CREATE TABLE IF NOT EXISTS structures (
 try {
   const cols = db.prepare(`PRAGMA table_info(systems)`).all().map(c => c.name);
   if (!cols.includes('notes')) db.exec(`ALTER TABLE systems ADD COLUMN notes TEXT DEFAULT ''`);
-} catch {}
+} catch { }
+// after db.exec(CREATE TABLE ...) and other PRAGMA migrations you already have:
+try {
+  const cols = db.prepare(`PRAGMA table_info(systems)`).all().map(c => c.name);
+  if (!cols.includes('evicted')) {
+    db.exec(`ALTER TABLE systems ADD COLUMN evicted INTEGER NOT NULL DEFAULT 0`);
+  }
+} catch { }
+
 
 function formatISKShort(n) {
   const x = Number(n || 0);
-  if (x >= 1e9) return (x / 1e9).toFixed(2).replace(/\.00$/,'') + 'b';
-  if (x >= 1e6) return (x / 1e6).toFixed(2).replace(/\.00$/,'') + 'm';
-  if (x >= 1e3) return (x / 1e3).toFixed(2).replace(/\.00$/,'') + 'k';
+  if (x >= 1e9) return (x / 1e9).toFixed(2).replace(/\.00$/, '') + 'b';
+  if (x >= 1e6) return (x / 1e6).toFixed(2).replace(/\.00$/, '') + 'm';
+  if (x >= 1e3) return (x / 1e3).toFixed(2).replace(/\.00$/, '') + 'k';
   return x.toLocaleString();
 }
 
@@ -83,6 +91,7 @@ function getSystem(jcode) {
     structures: rows,
     pilot: 'Leshak Pilot 1',
     notes: sys.notes || '',
+    evicted: !!sys.evicted, 
   };
 }
 
@@ -237,6 +246,7 @@ app.get('/admin/systems', requireAdmin, (req, res) => {
   const rows = search
     ? db.prepare(`
         SELECT s.jcode,
+               s.evicted AS evicted,
                s.ransom_isk AS ransomISK,
                s.created_at,
                s.updated_at,
@@ -262,6 +272,14 @@ app.get('/admin/systems', requireAdmin, (req, res) => {
       `).all();
 
   res.json(rows);
+});
+
+app.patch('/admin/systems/:jcode/evicted', requireAdmin, (req, res) => {
+  const J = String(req.params.jcode || '').toUpperCase();
+  const next = req.body && (req.body.evicted ? 1 : 0);
+  const r = db.prepare('UPDATE systems SET evicted = ?, updated_at = CURRENT_TIMESTAMP WHERE jcode = ?').run(next, J);
+  if (r.changes === 0) return res.sendStatus(404);
+  res.sendStatus(204);
 });
 
 // ---- Start server ----

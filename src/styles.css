@@ -219,3 +219,26 @@ body::before{
 /* (optional) globally make all inputs a touch darker everywhere */
 :root { --input-bg: rgba(0,0,0,.88); }
 input, textarea { background: var(--input-bg); }
+
+/* Big red "EVICTED" stamp */
+.evicted-stamp{
+  position: fixed;
+  inset: 0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  pointer-events:none;
+  z-index: 40;                   /* above content, below sticky header (z-50) and modals */
+  transform: rotate(-18deg);
+  font-weight: 900;
+  letter-spacing: .12em;
+  font-size: clamp(48px, 14vw, 220px);
+  color: rgba(255, 45, 45, .24);
+  text-shadow:
+    0 0 0 rgba(0,0,0,.0),
+    0 0 12px rgba(255,0,0,.08),
+    0 2px 0 rgba(0,0,0,.35);
+  -webkit-text-stroke: 2px rgba(255, 60, 60, .35);
+  text-stroke: 2px rgba(255, 60, 60, .35);
+  filter: saturate(120%);
+}

@@ -12,6 +12,7 @@ type Data = {
   structures: Structure[];
   pilot: string;
   notes?: string;
+  evicted?: boolean;
 };
 
 export default function JCode() {
@@ -62,48 +63,48 @@ export default function JCode() {
       </div>
     );
 
-return (
-  <div className="bg-black text-green-400 font-mono">
-    <div className="mx-auto max-w-6xl px-4 md:px-6 py-8">
-      <div className="text-sm text-green-300/75 mb-3">{data.jcode} — Eviction Appraisal</div>
-
-      {/* stack sections with space */}
-      <div className="space-y-6 md:space-y-8">
-        {/* Ransom summary panel stays the same */}
-        <section className="panel panel-solid ransom">
-          <div className="kv">
-            <div className="text-green-300/80">Total Value</div>
-            <div className="font-bold">{data.totalStructuresISK.toLocaleString()} ISK</div>
-            <div className="text-green-300/80">Ransom to withdraw</div>
-            <div className="font-bold">{data.ransomISK.toLocaleString()} ISK</div>
-          </div>
-          <div className="btns">
-            <button onClick={() => setPayOpen(true)}>Pay Ransom</button>
-            <button className="ghost" onClick={() => setNegOpen(true)}>Negotiate</button>
-          </div>
-        </section>
-
-        {!!data.notes?.trim() && (
-          <section className="panel panel-solid ">
-            <h2 className="mb-2 glow text-lg">Notes</h2>
-            <pre className="whitespace-pre-wrap text-green-300/90">{data.notes}</pre>
-          </section>
-        )}
-
-        {/* wider gaps between structure cards */}
-        <section className="grid md:grid-cols-2 gap-6 md:gap-8">
-          {data.structures.map((s, i) => (
-            <div key={i} className="panel panel-solid ">
-              <div className="flex items-center justify-between">
-                <h3 className="glow text-xl">{s.kind}</h3>
-                <div className="text-green-300/90">~{s.estimatedISK.toLocaleString()} ISK</div>
-              </div>
-              <pre className="mt-3 whitespace-pre-wrap text-green-200/90 text-sm bg-black/20 p-3 rounded border border-green-500/20">
-                {s.fitText}
-              </pre>
+  return (
+    <div className="bg-black text-green-400 font-mono">
+      {data.evicted && <div className="evicted-stamp">EVICTED</div>}
+      <div className="mx-auto max-w-6xl px-4 md:px-6 py-8">
+        <div className="text-sm text-green-300/75 mb-3">{data.jcode} — Eviction Appraisal</div>
+        {/* stack sections with space */}
+        <div className="space-y-6 md:space-y-8">
+          {/* Ransom summary panel stays the same */}
+          <section className="panel panel-solid ransom">
+            <div className="kv">
+              <div className="text-green-300/80">Total Value</div>
+              <div className="font-bold">{data.totalStructuresISK.toLocaleString()} ISK</div>
+              <div className="text-green-300/80">Ransom to withdraw</div>
+              <div className="font-bold">{data.ransomISK.toLocaleString()} ISK</div>
             </div>
-          ))}
-        </section>
+            <div className="btns">
+              <button onClick={() => setPayOpen(true)}>Pay Ransom</button>
+              <button className="ghost" onClick={() => setNegOpen(true)}>Negotiate</button>
+            </div>
+          </section>
+
+          {!!data.notes?.trim() && (
+            <section className="panel panel-solid ">
+              <h2 className="mb-2 glow text-lg">Notes</h2>
+              <pre className="whitespace-pre-wrap text-green-300/90">{data.notes}</pre>
+            </section>
+          )}
+
+          {/* wider gaps between structure cards */}
+          <section className="grid md:grid-cols-2 gap-6 md:gap-8">
+            {data.structures.map((s, i) => (
+              <div key={i} className="panel panel-solid ">
+                <div className="flex items-center justify-between">
+                  <h3 className="glow text-xl">{s.kind}</h3>
+                  <div className="text-green-300/90">~{s.estimatedISK.toLocaleString()} ISK</div>
+                </div>
+                <pre className="mt-3 whitespace-pre-wrap text-green-200/90 text-sm bg-black/20 p-3 rounded border border-green-500/20">
+                  {s.fitText}
+                </pre>
+              </div>
+            ))}
+          </section>
         </div>
       </div>
 
