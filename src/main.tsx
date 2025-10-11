@@ -7,6 +7,7 @@ import Home from "./pages/Home";
 import JCode from "./pages/JCode";
 import Admin from "./pages/Admin";
 import "./styles.css";
+import StructureAge from "./pages/StructureAge";
 
 const router = createBrowserRouter([
   {
@@ -16,6 +17,7 @@ const router = createBrowserRouter([
       { index: true, element: <Home /> },
       { path: "j/:jcode", element: <JCode /> },
       { path: "admin", element: <Admin /> },
+      { path: "age", element: <StructureAge />}
     ],
   },
 ]);

@@ -293,6 +293,128 @@ app.patch('/admin/systems/:jcode/evicted', requireAdmin, (req, res) => {
   res.sendStatus(204);
 });
 
+// ==== Structure Age Index (load once, then answer in O(log N)) ====
+import fs from 'fs';
+import path from 'path';
+
+// CONFIG: where your lean CSV sits (id,first_seen_iso)
+const AGE_CSV_PATH = process.env.A4E_AGE_CSV || path.join(process.cwd(), 'data', 'a4e_first_seen_monotone.csv');
+
+let AGE_IDS = [];      // BigInt[]
+let AGE_EPOCHS = [];   // number[] (seconds)
+
+// Lightweight CSV reader for "id,first_seen_iso"
+function loadAgeCSV(p) {
+  const text = fs.readFileSync(p, 'utf8').trim();
+  const lines = text.split(/\r?\n/);
+  // detect header
+  const start = /^\d+$/.test(lines[0]?.split(',')[0]) ? 0 : 1;
+  const rows = [];
+  for (let i = start; i < lines.length; i++) {
+    const [idStr, iso] = lines[i].split(',');
+    if (!idStr || !iso) continue;
+    const t = Date.parse(iso);
+    if (!Number.isFinite(t)) continue;
+    rows.push({ id: BigInt(idStr.trim()), ts: Math.floor(t / 1000) });
+  }
+  rows.sort((a, b) => (a.id < b.id ? -1 : 1));
+  AGE_IDS = rows.map(r => r.id);
+  AGE_EPOCHS = rows.map(r => r.ts);
+  console.log(`[age] Loaded ${rows.length} rows from ${p}`);
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// Binary search: index where x would be inserted to keep AGE_IDS sorted
+function bsearchBigInt(arr, x) {
+  let lo = 0, hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (arr[mid] < x) lo = mid + 1; else hi = mid;
+  }
+  return lo; // insertion index
+}
+
+// Core estimation: local linear interpolation + uncertainty from local gap
+function estimateAgeRange(structIdBigInt) {
+  if (!AGE_IDS.length) return null;
+
+  const i = bsearchBigInt(AGE_IDS, structIdBigInt);
+
+  // Exact hit
+  if (i < AGE_IDS.length && AGE_IDS[i] === structIdBigInt) {
+    const ts = AGE_EPOCHS[i];
+    // Narrow range on exact point; if neighboring points equal, pad a few days
+    const padDays = 3;
+    const low = ts - padDays * 86400;
+    const high = ts + padDays * 86400;
+    return { method: 'exact', ts, low, high };
+  }
+
+  // Determine bracketing points
+  const hasLo = i > 0;
+  const hasHi = i < AGE_IDS.length;
+  if (!hasLo && !hasHi) return null;
+
+  // If only one neighbor, extrapolate with average global slope
+  if (!hasLo || !hasHi) {
+    const aIdx = hasLo ? AGE_IDS.length - 2 : 0;
+    const bIdx = hasLo ? AGE_IDS.length - 1 : 1;
+    const did = Number(AGE_IDS[bIdx] - AGE_IDS[aIdx]);
+    const dts = AGE_EPOCHS[bIdx] - AGE_EPOCHS[aIdx];
+    const slope = did ? (dts / did) : 0; // seconds per id
+    const base = hasLo ? AGE_EPOCHS[bIdx] : AGE_EPOCHS[aIdx];
+    const off = Number(structIdBigInt - (hasLo ? AGE_IDS[bIdx] : AGE_IDS[aIdx]));
+    const ts = Math.round(base + slope * off);
+    const pad = 7 * 86400; // be looser at edges
+    return { method: hasLo ? 'extrapolate-tail' : 'extrapolate-head', ts, low: ts - pad, high: ts + pad };
+  }
+
+  // Interpolate between neighbors
+  const loId = AGE_IDS[i - 1], hiId = AGE_IDS[i];
+  const loTs = AGE_EPOCHS[i - 1], hiTs = AGE_EPOCHS[i];
+
+  const did = Number(hiId - loId);
+  const alpha = did ? Number(structIdBigInt - loId) / did : 0.5;
+  const ts = Math.round(loTs + alpha * (hiTs - loTs));
+
+  // Uncertainty heuristic:
+  // - Base on local time gap, tighter in dense regions, looser in sparse/plateau
+  // - Clamp to [±2d, ±7d]
+  const gap = Math.abs(hiTs - loTs);
+  const half = Math.round(gap * 0.25);              // ±25% of gap
+  const pad = clamp(half, 2 * 86400, 7 * 86400);    // 2–7 days
+  return { method: 'interpolate', ts, low: ts - pad, high: ts + pad };
+}
+
+// Load at startup
+try {
+  loadAgeCSV(AGE_CSV_PATH);
+} catch (e) {
+  console.warn(`[age] Failed to load ${AGE_CSV_PATH}: ${e.message}`);
+}
+
+// API: GET /age/:id → { id, method, midISO, lowISO, highISO, daysWide }
+app.get('/age/:id', (req, res) => {
+  const raw = (req.params.id || '').trim();
+  if (!/^\d{10,}$/.test(raw)) return res.status(400).json({ error: 'Invalid structure ID' });
+
+  if (!AGE_IDS.length) return res.status(503).json({ error: 'Age index not loaded' });
+
+  const r = estimateAgeRange(BigInt(raw));
+  if (!r) return res.status(404).json({ error: 'Not estimable' });
+
+  const toISO = s => new Date(s * 1000).toISOString();
+  res.json({
+    id: raw,
+    method: r.method,
+    midISO: toISO(r.ts),
+    lowISO: toISO(r.low),
+    highISO: toISO(r.high),
+    daysWide: ((r.high - r.low) / 86400).toFixed(1)
+  });
+});
+
 // ---- Start server ----
 const port = 4000;
 app.listen(port, () => console.log(`API listening on ${port}`));
