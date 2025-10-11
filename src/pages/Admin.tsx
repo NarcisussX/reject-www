@@ -45,7 +45,7 @@ export default function Admin() {
                 return;
             }
             const data = (await res.json()) as ListItem[];
-            setList(data);
+            setList(data.map(d => ({ ...d, evicted: !!(d as any).evicted })));
         } finally {
             setLoading(false);
         }

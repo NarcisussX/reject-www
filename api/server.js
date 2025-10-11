@@ -91,7 +91,7 @@ function getSystem(jcode) {
     structures: rows,
     pilot: 'Leshak Pilot 1',
     notes: sys.notes || '',
-    evicted: !!sys.evicted, 
+    evicted: !!sys.evicted,
   };
 }
 
@@ -260,6 +260,7 @@ app.get('/admin/systems', requireAdmin, (req, res) => {
       `).all(like)
     : db.prepare(`
         SELECT s.jcode,
+               s.evicted AS evicted,
                s.ransom_isk AS ransomISK,
                s.created_at,
                s.updated_at,
@@ -271,7 +272,17 @@ app.get('/admin/systems', requireAdmin, (req, res) => {
         ORDER BY s.updated_at DESC, s.created_at DESC
       `).all();
 
-  res.json(rows);
+  res.json(
+    rows.map(r => ({
+      jcode: r.jcode,
+      ransomISK: Number(r.ransomISK) || 0,
+      structuresCount: Number(r.structuresCount) || 0,
+      totalStructuresISK: Number(r.totalStructuresISK) || 0,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      evicted: !!Number(r.evicted),    
+    }))
+  );
 });
 
 app.patch('/admin/systems/:jcode/evicted', requireAdmin, (req, res) => {
