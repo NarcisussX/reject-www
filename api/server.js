@@ -436,39 +436,61 @@ app.get('/age/:id', (req, res) => {
 });
 
 // --- Corp name -> corp ID via ESI search (cached) ---
-const corpCache = new Map(); // nameLower -> id
+// --- Corp name → corp_id (cached) ---
+// Handles both /api/corp-id and /corp-id so it works with either proxy style.
+const corpCache = new Map(); // key: lower(name) -> id
 
-app.get("/api/corp-id", async (req, res) => {
+app.get(["/api/corp-id", "/corp-id"], async (req, res) => {
   const name = String(req.query.name || "").trim();
   if (!name) return res.status(400).json({ error: "missing name" });
 
   const key = name.toLowerCase();
-  if (corpCache.has(key)) return res.json({ name, id: corpCache.get(key), cached: true });
+  if (corpCache.has(key)) {
+    return res.json({ name, id: corpCache.get(key), cached: true });
+  }
 
   try {
-    // strict search first
-    const q = new URLSearchParams({
-      categories: "corporation",
-      datasource: "tranquility",
-      search: name,
-      strict: "true"
-    }).toString();
+    // Prefer exact resolver
+    let id = null;
+    const idsRes = await fetch(
+      "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify([name]),
+      }
+    );
+    if (idsRes.ok) {
+      const j = await idsRes.json();
+      if (Array.isArray(j?.corporations) && j.corporations.length) {
+        id = j.corporations[0].id;
+      }
+    }
 
-    let r = await fetch(`https://esi.evetech.net/latest/search/?${q}`, { headers: { "Accept": "application/json" }});
-    let j = await r.json();
-
-    let id = Array.isArray(j?.corporation) && j.corporation.length ? j.corporation[0] : null;
-
-    // fallback: non-strict, then pick case-insensitive best match
+    // Fallback: search API
     if (!id) {
-      const q2 = new URLSearchParams({
-        categories: "corporation", datasource: "tranquility", search: name, strict: "false"
+      const strict = new URLSearchParams({
+        categories: "corporation",
+        datasource: "tranquility",
+        search: name,
+        strict: "true",
       }).toString();
-      r = await fetch(`https://esi.evetech.net/latest/search/?${q2}`);
-      j = await r.json();
+      let r = await fetch(`https://esi.evetech.net/latest/search/?${strict}`);
+      let j = await r.json();
       if (Array.isArray(j?.corporation) && j.corporation.length) {
-        // If multiple, pick the first; for better accuracy we could resolve /universe/names
         id = j.corporation[0];
+      } else {
+        const loose = new URLSearchParams({
+          categories: "corporation",
+          datasource: "tranquility",
+          search: name,
+          strict: "false",
+        }).toString();
+        r = await fetch(`https://esi.evetech.net/latest/search/?${loose}`);
+        j = await r.json();
+        if (Array.isArray(j?.corporation) && j.corporation.length) {
+          id = j.corporation[0];
+        }
       }
     }
 
@@ -480,6 +502,7 @@ app.get("/api/corp-id", async (req, res) => {
     res.status(502).json({ error: "esi lookup failed" });
   }
 });
+
 
 
 // ---- Start server ----

@@ -58,7 +58,6 @@ export default function StructureAge() {
     const [loading, setLoading] = useState(false);
 
     // parsed bits from paste
-    const [parsedId, setParsedId] = useState<string | undefined>();
     const [parsedJ, setParsedJ] = useState<string | undefined>();
     const [parsedCorp, setParsedCorp] = useState<string | undefined>();
     const [corpId, setCorpId] = useState<number | undefined>();
@@ -69,7 +68,6 @@ export default function StructureAge() {
         setErr(null); setData(null);
 
         const { structureId, jcode, corpName } = extractFromPaste(input);
-        setParsedId(structureId ?? undefined);
         setParsedJ(jcode ?? undefined);
         setParsedCorp(corpName ?? undefined);
 
@@ -183,21 +181,54 @@ export default function StructureAge() {
             </form>
 
             {/* Parsed preview (optional) */}
-            {(parsedId || parsedJ || parsedCorp) && (
-                <p className="text-xs text-green-300/80 mb-6">
-                    {parsedId && <>ID: <code>{parsedId}</code>{' '}</>}
-                    {parsedJ && <>• System: <a className="underline" href={`https://anoik.is/systems/${parsedJ}`} target="_blank" rel="noreferrer">{parsedJ}</a>{' '}</>}
+            {/* Parsed preview (bigger, no ID) */}
+            {(parsedJ || parsedCorp) && (
+                <div className="mb-6 text-green-200 text-base sm:text-lg">
+                    {parsedJ && (
+                        <>
+                            <span className="text-green-400/80">System:</span>{" "}
+                            <a
+                                className="underline font-semibold"
+                                href={`https://anoik.is/systems/${parsedJ}`}
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                {parsedJ}
+                            </a>
+                        </>
+                    )}
+
+                    {parsedJ && parsedCorp && (
+                        <span className="mx-2 text-green-500/50">•</span>
+                    )}
+
                     {parsedCorp && (
                         <>
-                            • Corp: <span>{parsedCorp}</span>{' '}
-                            {corpResolving && <span>(resolving…)</span>}
+                            <span className="text-green-400/80">Corp:</span>{" "}
+                            <span className="font-medium">{parsedCorp}</span>
+                            {corpResolving && (
+                                <span className="ml-2 text-green-400/70 text-sm">(resolving…)</span>
+                            )}
                             {!corpResolving && corpId && (
-                                <>(<a className="underline" href={`https://zkillboard.com/corporation/${corpId}/`} target="_blank" rel="noreferrer">zKill</a>)</>
+                                <>
+                                    {" "}
+                                    (
+                                    <a
+                                        className="underline"
+                                        href={`https://zkillboard.com/corporation/${corpId}/`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                    >
+                                        zKill
+                                    </a>
+                                    )
+                                </>
                             )}
                         </>
                     )}
-                </p>
+                </div>
             )}
+
 
 
             {err && <p className="text-red-400">{err}</p>}
