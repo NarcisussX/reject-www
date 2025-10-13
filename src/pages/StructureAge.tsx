@@ -199,7 +199,7 @@ export default function StructureAge() {
                     )}
 
                     {parsedJ && parsedCorp && (
-                        <span className="mx-2 text-green-500/50">•</span>
+                        <br/>
                     )}
 
                     {parsedCorp && (
