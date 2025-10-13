@@ -521,21 +521,62 @@ async function fetchJSON(url, init = {}) {
 }
 
 // 1) Resolve J-code to systemId
+const systemCache = new Map(); // jcode -> id
+
 app.get(["/api/system-id/:jcode", "/system-id/:jcode"], async (req, res) => {
+  const raw = String(req.params.jcode || "").toUpperCase();
+  const m = raw.match(/J\d{6}/);
+  if (!m) return res.status(400).json({ error: "bad jcode" });
+  const j = m[0];
+
+  if (systemCache.has(j)) return res.json({ jcode: j, id: systemCache.get(j), cached: true });
+
   try {
-    const j = String(req.params.jcode || "").toUpperCase();
-    const data = await fetchJSON("https://esi.evetech.net/latest/universe/ids/?datasource=tranquility", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify([j])
+    // 1) Preferred: POST /universe/ids
+    const idsResp = await fetch(
+      "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify([j]),
+      }
+    );
+
+    if (idsResp.ok) {
+      const d = await idsResp.json();
+      const arr = (d.systems || d.solar_systems || []); // <-- ESI uses "systems"
+      const hit = arr.find((s) => String(s.name).toUpperCase() === j);
+      if (hit?.id) {
+        systemCache.set(j, hit.id);
+        return res.json({ jcode: j, id: hit.id, name: hit.name });
+      }
+    }
+
+    // 2) Fallback: GET /search?categories=solar_system
+    const qs = new URLSearchParams({
+      categories: "solar_system",
+      datasource: "tranquility",
+      search: j,
+      strict: "true",
+    }).toString();
+    const sResp = await fetch(`https://esi.evetech.net/latest/search/?${qs}`, {
+      headers: { Accept: "application/json" },
     });
-    const sys = (data.solar_systems || []).find(s => s.name?.toUpperCase() === j);
-    if (!sys) return res.status(404).json({ jcode: j, id: null });
-    res.json({ jcode: j, id: sys.id, name: sys.name });
+    if (sResp.ok) {
+      const sj = await sResp.json();
+      const id = Array.isArray(sj?.solar_system) && sj.solar_system.length ? sj.solar_system[0] : null;
+      if (id) {
+        systemCache.set(j, id);
+        return res.json({ jcode: j, id });
+      }
+    }
+
+    return res.status(404).json({ jcode: j, id: null });
   } catch (e) {
-    res.status(502).json({ error: "esi resolve failed" });
+    return res.status(502).json({ error: "esi resolve failed" });
   }
 });
+
 
 // 2) Killboard summary (mirrors your tiff.tools util)
 app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], async (req, res) => {
