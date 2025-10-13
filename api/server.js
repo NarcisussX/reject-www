@@ -503,6 +503,136 @@ app.get(["/api/corp-id", "/corp-id"], async (req, res) => {
   }
 });
 
+// ---- System intel: J-code → systemId, killboard summary, zKill heatmap ----
+import dayjs from "dayjs";
+
+// small helper
+async function fetchJSON(url, init = {}) {
+  const r = await fetch(url, {
+    ...init,
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": "RejectIntel/1.0 (+reject.app)", // be polite to zKill/ESI
+      ...(init.headers || {})
+    }
+  });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+
+// 1) Resolve J-code to systemId
+app.get(["/api/system-id/:jcode", "/system-id/:jcode"], async (req, res) => {
+  try {
+    const j = String(req.params.jcode || "").toUpperCase();
+    const data = await fetchJSON("https://esi.evetech.net/latest/universe/ids/?datasource=tranquility", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([j])
+    });
+    const sys = (data.solar_systems || []).find(s => s.name?.toUpperCase() === j);
+    if (!sys) return res.status(404).json({ jcode: j, id: null });
+    res.json({ jcode: j, id: sys.id, name: sys.name });
+  } catch (e) {
+    res.status(502).json({ error: "esi resolve failed" });
+  }
+});
+
+// 2) Killboard summary (mirrors your tiff.tools util)
+app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], async (req, res) => {
+  try {
+    const systemId = String(req.params.systemId);
+    const MAX_AGE_DAYS = 60;
+    const BATCH_SIZE = 20;
+    const now = dayjs();
+
+    // zKill list of killmails for this system
+    const killmails = await fetchJSON(`https://zkillboard.com/api/solarSystemID/${systemId}/`);
+
+    // caches + accumulators
+    const corpNameCache = new Map();
+    async function corpName(id) {
+      if (corpNameCache.has(id)) return corpNameCache.get(id);
+      try {
+        const j = await fetchJSON(`https://esi.evetech.net/latest/corporations/${id}/?datasource=tranquility`);
+        corpNameCache.set(id, j.name || "Unknown Corp");
+      } catch { corpNameCache.set(id, "Unknown Corp"); }
+      return corpNameCache.get(id);
+    }
+
+    const corpActivity = new Map(); // id -> { lastSeen, days:Set }
+    let totalKills = 0;
+    let mostRecent = null;
+    let oldest = null;
+
+    // Pull batches of detailed killmails from ESI
+    for (let i = 0; i < killmails.length; i += BATCH_SIZE) {
+      const batch = killmails.slice(i, i + BATCH_SIZE);
+      const details = await Promise.allSettled(
+        batch.map(k => fetchJSON(`https://esi.evetech.net/latest/killmails/${k.killmail_id}/${k.zkb.hash}/?datasource=tranquility`))
+      );
+
+      for (const r of details) {
+        if (r.status !== "fulfilled") continue;
+        const kill = r.value;
+        if (!kill?.killmail_time) continue;
+
+        const t = dayjs(kill.killmail_time);
+        mostRecent = !mostRecent || t.isAfter(mostRecent) ? t : mostRecent;
+        oldest     = !oldest     || t.isBefore(oldest)    ? t : oldest;
+
+        const age = now.diff(t, "day");
+        if (age > MAX_AGE_DAYS) {
+          // we hit older-than-window; finish with what we have
+          i = killmails.length; break;
+        }
+
+        totalKills++;
+        const involved = [kill.victim, ...(kill.attackers || [])];
+        for (const ent of involved) {
+          const cid = ent.corporation_id;
+          if (!cid) continue;
+          const id = String(cid);
+          const prev = corpActivity.get(id);
+          const days = prev?.days || new Set();
+          days.add(t.format("YYYY-MM-DD"));
+          const lastSeen = Math.min(prev?.lastSeen ?? Infinity, age);
+          corpActivity.set(id, { lastSeen, days });
+        }
+      }
+    }
+
+    // summarize (name lookups in parallel)
+    const corps = await Promise.all(
+      Array.from(corpActivity.entries()).map(async ([id, v]) => ({
+        id,
+        name: await corpName(id),
+        lastSeenDaysAgo: v.lastSeen,
+        activeDays: v.days.size
+      }))
+    );
+
+    res.json({
+      systemId,
+      totalKills,
+      daysCovered: oldest ? now.diff(oldest, "day") : 0,
+      mostRecentKillDaysAgo: mostRecent ? now.diff(mostRecent, "day") : null,
+      activeCorporations: corps.sort((a,b) => a.lastSeenDaysAgo - b.lastSeenDaysAgo)
+    });
+  } catch (e) {
+    res.status(502).json({ error: "killboard summary failed" });
+  }
+});
+
+// 3) Proxy zKill heatmap (optional but nice for CORS/stability)
+app.get(["/api/zkill-activity/:systemId", "/zkill-activity/:systemId"], async (req, res) => {
+  try {
+    const systemId = String(req.params.systemId);
+    const data = await fetchJSON(`https://zkillboard.com/api/stats/solarSystemID/${systemId}/`);
+    res.json(data.activity || null);
+  } catch (e) {
+    res.status(502).json({ error: "zkill stats failed" });
+  }
+});
 
 
 // ---- Start server ----
