@@ -10,7 +10,6 @@ type Summary = {
 };
 
 export default function SystemIntel({ jcode }: { jcode?: string }) {
-  const [systemId, setSystemId] = useState<string | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -19,13 +18,12 @@ export default function SystemIntel({ jcode }: { jcode?: string }) {
     let abort = false;
     (async () => {
       try {
-        setErr(null); setSystemId(null); setActivity(null); setSummary(null);
+        setErr(null); setActivity(null); setSummary(null);
         if (!jcode) return;
 
         const sys = await fetch(`/api/system-id/${encodeURIComponent(jcode)}`).then(r => r.json());
         if (!sys?.id) { setErr("Could not resolve system ID"); return; }
         if (abort) return;
-        setSystemId(String(sys.id));
 
         const [act, sum] = await Promise.all([
           fetch(`/api/zkill-activity/${sys.id}`).then(r => r.json()),
