@@ -13,6 +13,7 @@ type Data = {
   pilot: string;
   notes?: string;
   evicted?: boolean;
+  ransomed?: boolean;
 };
 
 export default function JCode() {
@@ -66,6 +67,7 @@ export default function JCode() {
   return (
     <div className="bg-black text-green-400 font-mono">
       {data.evicted && <div className="evicted-stamp">EVICTED</div>}
+      {data.ransomed && <div className="ransomed-stamp">RANSOMED</div>}
       <div className="mx-auto max-w-6xl px-4 md:px-6 py-8">
         <div className="text-sm text-green-300/75 mb-3">{data.jcode} — Eviction Appraisal</div>
         {/* stack sections with space */}

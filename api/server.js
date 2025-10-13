@@ -44,6 +44,12 @@ try {
     db.exec(`ALTER TABLE systems ADD COLUMN evicted INTEGER NOT NULL DEFAULT 0`);
   }
 } catch { }
+try {
+  const cols = db.prepare(`PRAGMA table_info(systems)`).all().map(c => c.name);
+  if (!cols.includes('ransomed')) {
+    db.exec(`ALTER TABLE systems ADD COLUMN ransomed INTEGER NOT NULL DEFAULT 0`);
+  }
+} catch {}
 
 
 function formatISKShort(n) {
@@ -92,6 +98,7 @@ function getSystem(jcode) {
     pilot: 'Leshak Pilot 1',
     notes: sys.notes || '',
     evicted: !!sys.evicted,
+    ransomed: !!Number(sys.ransomed),
   };
 }
 
@@ -247,6 +254,7 @@ app.get('/admin/systems', requireAdmin, (req, res) => {
     ? db.prepare(`
         SELECT s.jcode,
                s.evicted AS evicted,
+               s.ransomed AS ransomed,
                s.ransom_isk AS ransomISK,
                s.created_at,
                s.updated_at,
@@ -261,6 +269,7 @@ app.get('/admin/systems', requireAdmin, (req, res) => {
     : db.prepare(`
         SELECT s.jcode,
                s.evicted AS evicted,
+               s.ransomed AS ransomed,
                s.ransom_isk AS ransomISK,
                s.created_at,
                s.updated_at,
@@ -281,6 +290,7 @@ app.get('/admin/systems', requireAdmin, (req, res) => {
       created_at: r.created_at,
       updated_at: r.updated_at,
       evicted: !!Number(r.evicted),    
+      ransomed: !!Number(r.ransomed), 
     }))
   );
 });
@@ -289,6 +299,16 @@ app.patch('/admin/systems/:jcode/evicted', requireAdmin, (req, res) => {
   const J = String(req.params.jcode || '').toUpperCase();
   const next = req.body && (req.body.evicted ? 1 : 0);
   const r = db.prepare('UPDATE systems SET evicted = ?, updated_at = CURRENT_TIMESTAMP WHERE jcode = ?').run(next, J);
+  if (r.changes === 0) return res.sendStatus(404);
+  res.sendStatus(204);
+});
+// PATCH /api/admin/systems/:jcode/ransomed  { ransomed: true|false }
+app.patch('/admin/systems/:jcode/ransomed', requireAdmin, (req, res) => {
+  const J = String(req.params.jcode || '').toUpperCase();
+  const next = req.body && (req.body.ransomed ? 1 : 0);
+  const r = db.prepare(
+    'UPDATE systems SET ransomed = ?, updated_at = CURRENT_TIMESTAMP WHERE jcode = ?'
+  ).run(next, J);
   if (r.changes === 0) return res.sendStatus(404);
   res.sendStatus(204);
 });

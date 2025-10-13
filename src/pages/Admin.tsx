@@ -8,6 +8,7 @@ type ListItem = {
     created_at: string;
     updated_at: string;
     evicted?: number | boolean;
+    ransomed?: boolean | number;
 };
 
 type Row = { kind: string; estimatedISK: string; fitText: string };
@@ -45,7 +46,11 @@ export default function Admin() {
                 return;
             }
             const data = (await res.json()) as ListItem[];
-            setList(data.map(d => ({ ...d, evicted: !!(d as any).evicted })));
+            setList(data.map(d => ({
+                ...d,
+                evicted: !!(d as any).evicted,
+                ransomed: !!(d as any).ransomed,
+            })));
         } finally {
             setLoading(false);
         }
@@ -80,6 +85,18 @@ export default function Admin() {
             setList(list => list.map(x => x.jcode === item.jcode ? { ...x, evicted: next } : x));
         } else {
             alert('Failed to update evicted flag');
+        }
+    }
+    async function toggleRansomed(item: ListItem, next: boolean) {
+        const r = await authedFetch(`/admin/systems/${item.jcode}/ransomed`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ransomed: next }),
+        });
+        if (r.ok) {
+            setList(list => list.map(x => x.jcode === item.jcode ? { ...x, ransomed: next } : x));
+        } else {
+            alert("Failed to update ransomed flag");
         }
     }
 
@@ -191,7 +208,16 @@ export default function Admin() {
                                                 />
                                                 <span className="text-red-300/80 text-xs uppercase tracking-wide">evicted</span>
                                             </label>
-
+                                            <label className="inline-flex items-center gap-2 mr-3 align-middle">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={!!item.ransomed}
+                                                    onChange={(e) => toggleRansomed(item, e.target.checked)}
+                                                    className="accent-sky-500"
+                                                    title="Mark as ransomed"
+                                                />
+                                                <span className="text-sky-300/80 text-xs uppercase tracking-wide">ransomed</span>
+                                            </label>
                                             <button
                                                 onClick={() => startEdit(item.jcode)}
                                                 className="px-2 py-1 border border-green-500/40 rounded hover:bg-green-600/10 mr-2"
