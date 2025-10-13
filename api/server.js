@@ -435,6 +435,53 @@ app.get('/age/:id', (req, res) => {
   });
 });
 
+// --- Corp name -> corp ID via ESI search (cached) ---
+const corpCache = new Map(); // nameLower -> id
+
+app.get("/api/corp-id", async (req, res) => {
+  const name = String(req.query.name || "").trim();
+  if (!name) return res.status(400).json({ error: "missing name" });
+
+  const key = name.toLowerCase();
+  if (corpCache.has(key)) return res.json({ name, id: corpCache.get(key), cached: true });
+
+  try {
+    // strict search first
+    const q = new URLSearchParams({
+      categories: "corporation",
+      datasource: "tranquility",
+      search: name,
+      strict: "true"
+    }).toString();
+
+    let r = await fetch(`https://esi.evetech.net/latest/search/?${q}`, { headers: { "Accept": "application/json" }});
+    let j = await r.json();
+
+    let id = Array.isArray(j?.corporation) && j.corporation.length ? j.corporation[0] : null;
+
+    // fallback: non-strict, then pick case-insensitive best match
+    if (!id) {
+      const q2 = new URLSearchParams({
+        categories: "corporation", datasource: "tranquility", search: name, strict: "false"
+      }).toString();
+      r = await fetch(`https://esi.evetech.net/latest/search/?${q2}`);
+      j = await r.json();
+      if (Array.isArray(j?.corporation) && j.corporation.length) {
+        // If multiple, pick the first; for better accuracy we could resolve /universe/names
+        id = j.corporation[0];
+      }
+    }
+
+    if (!id) return res.status(404).json({ name, id: null });
+
+    corpCache.set(key, id);
+    res.json({ name, id });
+  } catch (e) {
+    res.status(502).json({ error: "esi lookup failed" });
+  }
+});
+
+
 // ---- Start server ----
 const port = 4000;
 app.listen(port, () => console.log(`API listening on ${port}`));
