@@ -1,4 +1,3 @@
-// Load env vars if dotenv is present (optional in prod)
 try { await import('dotenv/config'); } catch { }
 
 import express from 'express';
@@ -32,12 +31,12 @@ CREATE TABLE IF NOT EXISTS structures (
   estimated_value_isk INTEGER NOT NULL
 );
 `);
-// safe migration if "notes" didn’t exist on older DBs
+
 try {
   const cols = db.prepare(`PRAGMA table_info(systems)`).all().map(c => c.name);
   if (!cols.includes('notes')) db.exec(`ALTER TABLE systems ADD COLUMN notes TEXT DEFAULT ''`);
 } catch { }
-// after db.exec(CREATE TABLE ...) and other PRAGMA migrations you already have:
+
 try {
   const cols = db.prepare(`PRAGMA table_info(systems)`).all().map(c => c.name);
   if (!cols.includes('evicted')) {
@@ -64,7 +63,7 @@ function parseISK(x) {
   if (typeof x === 'number' && isFinite(x)) return Math.round(x);
   const s = String(x ?? '').trim().toLowerCase().replace(/[, _]/g, '');
   if (!s) return 0;
-  const m = s.match(/^(\d+(?:\.\d+)?)([kmb])?$/); // 1.2m, 900k, 1b
+  const m = s.match(/^(\d+(?:\.\d+)?)([kmb])?$/); 
   let n;
   if (m) {
     n = parseFloat(m[1]);
@@ -73,7 +72,7 @@ function parseISK(x) {
     if (suf === 'm') n *= 1e6;
     if (suf === 'b') n *= 1e9;
   } else {
-    n = Number(s); // raw digits like 1200000
+    n = Number(s); 
   }
   if (!isFinite(n)) return 0;
   return Math.round(n);
@@ -245,7 +244,7 @@ app.delete('/admin/systems/:jcode', requireAdmin, (req, res) => {
   res.sendStatus(204);
 });
 
-// GET /api/admin/systems?search=J12  (optional search)
+// GET /api/admin/systems?search=J12 
 app.get('/admin/systems', requireAdmin, (req, res) => {
   const search = (req.query.search || '').toString().trim().toUpperCase();
   const like = `%${search}%`;
@@ -317,13 +316,13 @@ app.patch('/admin/systems/:jcode/ransomed', requireAdmin, (req, res) => {
 import fs from 'fs';
 import path from 'path';
 
-// CONFIG: where your lean CSV sits (id,first_seen_iso)
+// CONFIG
 const AGE_CSV_PATH = process.env.A4E_AGE_CSV || path.join(process.cwd(), 'data', 'a4e_first_seen_monotone.csv');
 
-let AGE_IDS = [];      // BigInt[]
-let AGE_EPOCHS = [];   // number[] (seconds)
+let AGE_IDS = [];      
+let AGE_EPOCHS = [];   
 
-// Lightweight CSV reader for "id,first_seen_iso"
+// CSV reader
 function loadAgeCSV(p) {
   const text = fs.readFileSync(p, 'utf8').trim();
   const lines = text.split(/\r?\n/);
@@ -345,7 +344,7 @@ function loadAgeCSV(p) {
 
 function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
-// Binary search: index where x would be inserted to keep AGE_IDS sorted
+// Binary search
 function bsearchBigInt(arr, x) {
   let lo = 0, hi = arr.length;
   while (lo < hi) {
@@ -355,7 +354,7 @@ function bsearchBigInt(arr, x) {
   return lo; // insertion index
 }
 
-// Core estimation: local linear interpolation + uncertainty from local gap
+// Core estimation
 function estimateAgeRange(structIdBigInt) {
   if (!AGE_IDS.length) return null;
 
@@ -382,11 +381,11 @@ function estimateAgeRange(structIdBigInt) {
     const bIdx = hasLo ? AGE_IDS.length - 1 : 1;
     const did = Number(AGE_IDS[bIdx] - AGE_IDS[aIdx]);
     const dts = AGE_EPOCHS[bIdx] - AGE_EPOCHS[aIdx];
-    const slope = did ? (dts / did) : 0; // seconds per id
+    const slope = did ? (dts / did) : 0; 
     const base = hasLo ? AGE_EPOCHS[bIdx] : AGE_EPOCHS[aIdx];
     const off = Number(structIdBigInt - (hasLo ? AGE_IDS[bIdx] : AGE_IDS[aIdx]));
     const ts = Math.round(base + slope * off);
-    const pad = 7 * 86400; // be looser at edges
+    const pad = 7 * 86400; 
     return { method: hasLo ? 'extrapolate-tail' : 'extrapolate-head', ts, low: ts - pad, high: ts + pad };
   }
 
@@ -399,11 +398,9 @@ function estimateAgeRange(structIdBigInt) {
   const ts = Math.round(loTs + alpha * (hiTs - loTs));
 
   // Uncertainty heuristic:
-  // - Base on local time gap, tighter in dense regions, looser in sparse/plateau
-  // - Clamp to [±2d, ±7d]
   const gap = Math.abs(hiTs - loTs);
-  const half = Math.round(gap * 0.25);              // ±25% of gap
-  const pad = clamp(half, 2 * 86400, 7 * 86400);    // 2–7 days
+  const half = Math.round(gap * 0.25);             
+  const pad = clamp(half, 2 * 86400, 7 * 86400);    
   return { method: 'interpolate', ts, low: ts - pad, high: ts + pad };
 }
 
@@ -436,9 +433,7 @@ app.get('/age/:id', (req, res) => {
 });
 
 // --- Corp name -> corp ID via ESI search (cached) ---
-// --- Corp name → corp_id (cached) ---
-// Handles both /api/corp-id and /corp-id so it works with either proxy style.
-const corpCache = new Map(); // key: lower(name) -> id
+const corpCache = new Map(); 
 
 app.get(["/api/corp-id", "/corp-id"], async (req, res) => {
   const name = String(req.query.name || "").trim();
@@ -506,7 +501,6 @@ app.get(["/api/corp-id", "/corp-id"], async (req, res) => {
 // ---- System intel: J-code → systemId, killboard summary, zKill heatmap ----
 import dayjs from "dayjs";
 
-// small helper
 async function fetchJSON(url, init = {}) {
   const r = await fetch(url, {
     ...init,
@@ -520,8 +514,8 @@ async function fetchJSON(url, init = {}) {
   return r.json();
 }
 
-// 1) Resolve J-code to systemId
-const systemCache = new Map(); // jcode -> id
+// Resolve J-code to systemId
+const systemCache = new Map(); 
 
 app.get(["/api/system-id/:jcode", "/system-id/:jcode"], async (req, res) => {
   const raw = String(req.params.jcode || "").toUpperCase();
@@ -532,7 +526,7 @@ app.get(["/api/system-id/:jcode", "/system-id/:jcode"], async (req, res) => {
   if (systemCache.has(j)) return res.json({ jcode: j, id: systemCache.get(j), cached: true });
 
   try {
-    // 1) Preferred: POST /universe/ids
+    // Preferred: POST /universe/ids
     const idsResp = await fetch(
       "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility",
       {
@@ -552,7 +546,7 @@ app.get(["/api/system-id/:jcode", "/system-id/:jcode"], async (req, res) => {
       }
     }
 
-    // 2) Fallback: GET /search?categories=solar_system
+    // Fallback: GET /search?categories=solar_system
     const qs = new URLSearchParams({
       categories: "solar_system",
       datasource: "tranquility",
@@ -578,7 +572,7 @@ app.get(["/api/system-id/:jcode", "/system-id/:jcode"], async (req, res) => {
 });
 
 
-// 2) Killboard summary (mirrors your tiff.tools util)
+// Killboard summary (mirrors your tiff.tools util)
 app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], async (req, res) => {
   try {
     const systemId = String(req.params.systemId);
@@ -600,7 +594,7 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
       return corpNameCache.get(id);
     }
 
-    const corpActivity = new Map(); // id -> { lastSeen, days:Set }
+    const corpActivity = new Map(); 
     let totalKills = 0;
     let mostRecent = null;
     let oldest = null;
@@ -623,7 +617,6 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
 
         const age = now.diff(t, "day");
         if (age > MAX_AGE_DAYS) {
-          // we hit older-than-window; finish with what we have
           i = killmails.length; break;
         }
 
@@ -642,7 +635,7 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
       }
     }
 
-    // summarize (name lookups in parallel)
+    // summarize 
     const corps = await Promise.all(
       Array.from(corpActivity.entries()).map(async ([id, v]) => ({
         id,
@@ -664,7 +657,7 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
   }
 });
 
-// 3) Proxy zKill heatmap (optional but nice for CORS/stability)
+// 3) Proxy zKill heatmap 
 app.get(["/api/zkill-activity/:systemId", "/zkill-activity/:systemId"], async (req, res) => {
   try {
     const systemId = String(req.params.systemId);

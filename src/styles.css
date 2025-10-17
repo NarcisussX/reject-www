@@ -13,7 +13,6 @@
 html, body, #root { min-height: 100%; height: auto; }
 body { background:#000; color: var(--crt-green); }
 
-/* subtle vignette + halo so the bg isn’t flat black */
 body::before{
   content:"";
   position: fixed;
@@ -63,7 +62,6 @@ body::before{
   border-top:1px solid var(--crt-border-soft); padding:18px 0; color: var(--crt-text-soft);
 }
 
-/* keep your page content from hugging the edges */
 .content{ padding-top: 6px; }
 
 /* ---------- Panels / cards ---------- */
@@ -153,26 +151,23 @@ button.ghost:hover{ background: rgba(39,243,118,.08); }
 /* ---------- Small helpers ---------- */
 .text-soft{ color: var(--crt-text-soft); }
 
-/* ===== GLOBAL CRT + MATRIX OVERLAYS (no component changes needed) ===== */
-
-/* Stronger glow helpers (optional) */
+/* Stronger glow helpers */
 .crt-glow { text-shadow: 0 0 6px rgba(39,243,118,.75), 0 0 22px rgba(39,243,118,.25); }
 
-/* Scanlines across the whole app */
+/* Scanlines */
 @keyframes crt-scanlines { to { background-position: 0 -3px; } }
 body::after{
   content:"";
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: 3; /* above bg & matrix, below header (which is sticky) */
+  z-index: 3; 
   opacity: .17;
   background:
     repeating-linear-gradient(0deg, rgba(0,255,120,.055) 0 1px, transparent 2px 4px);
   animation: crt-scanlines 4s linear infinite;
 }
 
-/* Subtle vignette/halo (if you already have one, this just reinforces it) */
 body::before{
   content:"";
   position: fixed;
@@ -192,13 +187,13 @@ body::before{
   width: 100vw;
   height: 100vh;
   pointer-events: none;
-  z-index: 2;          /* body::after scanlines can stay at 3 */
-  opacity: .22;        /* tweak .18–.28 to taste */
+  z-index: 2;       
+  opacity: .22;      
   mix-blend-mode: screen;
 }
 
 
-/* Tiny cursor blink utility you can use anywhere */
+/* Tiny cursor blink utility */
 .crt-cursor { display:inline-block; width:.6ch; animation: blink 1.1s steps(1,end) infinite; }
 @keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
 
@@ -216,7 +211,6 @@ body::before{
   border-color: rgba(39,243,118,.55);
 }
 
-/* (optional) globally make all inputs a touch darker everywhere */
 :root { --input-bg: rgba(0,0,0,.88); }
 input, textarea { background: var(--input-bg); }
 
@@ -228,7 +222,7 @@ input, textarea { background: var(--input-bg); }
   align-items:center;
   justify-content:center;
   pointer-events:none;
-  z-index: 40;                   /* above content, below sticky header (z-50) and modals */
+  z-index: 40; 
   transform: rotate(-18deg);
   font-weight: 900;
   letter-spacing: .12em;

@@ -70,9 +70,7 @@ export default function JCode() {
       {data.ransomed && <div className="ransomed-stamp">RANSOMED</div>}
       <div className="mx-auto max-w-6xl px-4 md:px-6 py-8">
         <div className="text-sm text-green-300/75 mb-3">{data.jcode} — Eviction Appraisal</div>
-        {/* stack sections with space */}
         <div className="space-y-6 md:space-y-8">
-          {/* Ransom summary panel stays the same */}
           <section className="panel panel-solid ransom">
             <div className="kv">
               <div className="text-green-300/80">Total Value</div>
@@ -93,7 +91,6 @@ export default function JCode() {
             </section>
           )}
 
-          {/* wider gaps between structure cards */}
           <section className="grid md:grid-cols-2 gap-6 md:gap-8">
             {data.structures.map((s, i) => (
               <div key={i} className="panel panel-solid ">

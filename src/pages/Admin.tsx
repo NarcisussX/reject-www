@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 type ListItem = {
     jcode: string;
     ransomISK: number;
@@ -14,7 +14,7 @@ type ListItem = {
 type Row = { kind: string; estimatedISK: string; fitText: string };
 type Editing = { jcode: string; ransomISK: string; rows: Row[]; notes: string };
 
-const AUTH_KEY = "reject.admin.auth"; // base64 "user:pass" in sessionStorage
+const AUTH_KEY = "reject.admin.auth";
 
 export default function Admin() {
     const [authB64, setAuthB64] = useState<string | null>(() =>
@@ -326,7 +326,7 @@ function Editor({
     onSaved,
 }: {
     authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
-    editing: Editing;                               // <-- non-nullable now
+    editing: Editing;                               
     setEditing: (e: Editing | null) => void;
     onSaved: () => void;
 }) {
@@ -335,16 +335,15 @@ function Editor({
         e.preventDefault();
         const body = {
             jcode: editing.jcode.toUpperCase(),
-            ransomISK: editing.ransomISK, // send raw; server parses
+            ransomISK: editing.ransomISK, 
             notes: editing.notes,
             structures: editing.rows.map((r) => ({
                 kind: r.kind,
-                estimatedISK: r.estimatedISK, // raw; server parses
+                estimatedISK: r.estimatedISK, 
                 fitText: r.fitText,
             })),
         };
 
-        // POST upsert; if it fails for some reason, try PUT
         let r = await authedFetch("/admin/systems", {
             method: "POST",
             headers: { "Content-Type": "application/json" },

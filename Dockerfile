@@ -4,15 +4,12 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY . .
-# Vite will read VITE_* from .env automatically
 RUN npm run build
 
 # ---------- Serve ----------
 FROM nginx:1.27-alpine
-# SPA fallback so /foo/bar routes serve index.html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
-# tiny static hardening
 RUN adduser -D -H -u 10001 web && \
     chown -R web:root /usr/share/nginx/html && \
     sed -i 's/user  nginx;/user  web;/' /etc/nginx/nginx.conf

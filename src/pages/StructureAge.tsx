@@ -1,4 +1,5 @@
 // pages/StructureAge.tsx
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 import { useEffect, useRef, useState } from "react";
 import SystemIntel from "./SystemIntel";
 

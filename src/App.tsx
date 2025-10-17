@@ -8,13 +8,12 @@ function MatrixRain() {
     const c = ref.current!, x = c.getContext("2d")!;
     let w = (c.width = innerWidth), h = (c.height = innerHeight);
 
-    const fs = 16;                               // glyph size
+    const fs = 16;
     let cols = Math.floor(w / fs);
 
     const chars = "アイウエオｱｲｳｴｵ0123456789#$%&*+-/<>".split("");
     const drops = Array(cols).fill(0).map(() => Math.random() * h / fs);
     const speed = Array(cols).fill(0).map(() => 0.25 + Math.random() * 0.35);
-    // ↑ global speed ≈ 0.25–0.6 rows per frame (slow). Bump numbers to make it faster.
 
     const onResize = () => {
       w = c.width = innerWidth;
@@ -27,7 +26,6 @@ function MatrixRain() {
     (function draw() {
       raf = requestAnimationFrame(draw);
 
-      // slightly stronger fade also calms the motion
       x.fillStyle = "rgba(0,0,0,.10)";
       x.fillRect(0, 0, w, h);
 
@@ -40,10 +38,10 @@ function MatrixRain() {
 
         if (drops[i] * fs > h && Math.random() > 0.975) {
           drops[i] = 0;
-          speed[i] = 0.1 + Math.random() * 0.2; // new random slow speed for that column
+          speed[i] = 0.1 + Math.random() * 0.2; 
         }
 
-        drops[i] += speed[i]; // ← slower advance
+        drops[i] += speed[i]; 
       }
     })();
 
@@ -84,7 +82,7 @@ export default function App() {
         <div className="mx-auto max-w-6xl px-4 py-6 text-xs text-green-500/75">
           <div className="flex items-center justify-between gap-3">
             <p>© {new Date().getFullYear()} Rejected Applications Inc.</p>
-            <p>Asset Relocation Specialists — “We relocate your assets.”</p>
+            <p>Asset Relocation Specialists — “Your treasure is our junk!”</p>
           </div>
         </div>
       </footer>

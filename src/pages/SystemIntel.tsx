@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 type Activity = { days: string[]; max: number } & Record<number, any>;
 type Summary = {
     systemId: string;

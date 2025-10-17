@@ -13,14 +13,11 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=tw_web
-      # one service the routers will use
       - traefik.http.services.www.loadbalancer.server.port=80
-      # Router: www.reject.app  -> serve SPA
       - "traefik.http.routers.www.rule=Host(`www.reject.app`)"
       - traefik.http.routers.www.entrypoints=websecure
       - traefik.http.routers.www.tls=true
       - traefik.http.routers.www.service=www
-      # Router: reject.app (apex) -> serve the SAME SPA
       - "traefik.http.routers.www-apex.rule=Host(`reject.app`)"
       - traefik.http.routers.www-apex.entrypoints=websecure
       - traefik.http.routers.www-apex.tls=true
@@ -56,7 +53,6 @@ services:
       DISCORD_WEBHOOK: "${DISCORD_WEBHOOK_URL}"
     networks:
       - tw_web
-    # no ports and no Traefik labels → internal only
 
 networks:
   tw_web:
