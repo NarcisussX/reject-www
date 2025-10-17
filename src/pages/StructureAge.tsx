@@ -256,7 +256,7 @@ export default function StructureAge() {
                     {loading ? "…" : "Estimate"}
                 </button>
             </form>
-            <div className="mb-4 flex justify-end">
+            <div>
                 <ReinforceWidget />
             </div>
             {(parsedJ || parsedCorp) && (
