@@ -91,7 +91,7 @@ function ReinforcePopover() {
                 className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10"
                 title="Convert a UTC time to US timezones"
             >
-                UTC → PT/CT/ET
+                Reinforcement Timezone Converter
             </button>
 
             {open && (
