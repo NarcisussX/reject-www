@@ -1,5 +1,5 @@
 // pages/StructureAge.tsx
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import SystemIntel from "./SystemIntel";
 
 const fmtUTC = (iso: string) =>
@@ -44,43 +44,37 @@ function humanizeDays(days: number) {
     return parts.join(" ");
 }
 
-function ReinforceWidget() {
+function ReinforcePopover() {
+    const [open, setOpen] = useState(false);
     const [utcInput, setUtcInput] = useState("");
-    const [err, setErr] = useState<string | null>(null);
+    const popRef = useRef<HTMLDivElement | null>(null);
+
+    // Close on outside click / Esc
+    useEffect(() => {
+        const onDoc = (e: MouseEvent) => {
+            if (!popRef.current) return;
+            if (!popRef.current.contains(e.target as Node)) setOpen(false);
+        };
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+        document.addEventListener("mousedown", onDoc);
+        document.addEventListener("keydown", onKey);
+        return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+    }, []);
 
     function parseUtcHHMM(raw: string) {
         const s = raw.trim();
         if (!s) return null;
-        const digits = s.replace(/\D/g, "");
+        const d = s.replace(/\D/g, "");
         let h = 0, m = 0;
-
-        if (/^\d{4}$/.test(digits)) {           // 1800
-            h = +digits.slice(0, 2);
-            m = +digits.slice(2, 4);
-        } else if (/^\d{3}$/.test(digits)) {    // 300
-            h = +digits.slice(0, 1);
-            m = +digits.slice(1, 3);
-        } else if (/^\d{1,2}:\d{2}$/.test(s)) { // 03:00 / 3:00
-            const [hh, mm] = s.split(":");
-            h = +hh; m = +mm;
-        } else {
-            return null;
-        }
-
+        if (/^\d{4}$/.test(d)) { h = +d.slice(0, 2); m = +d.slice(2, 4); }         // 1800
+        else if (/^\d{3}$/.test(d)) { h = +d.slice(0, 1); m = +d.slice(1, 3); }     // 300
+        else if (/^\d{1,2}:\d{2}$/.test(s)) { const [hh, mm] = s.split(":"); h = +hh; m = +mm; } // 03:00
+        else return null;
         if (h < 0 || h > 23 || m < 0 || m > 59) return null;
         return { h, m };
     }
-
-    function fmtTZ(d: Date, tz: string) {
-        // AM/PM + short zone (PST/PDT etc.)
-        return new Intl.DateTimeFormat("en-US", {
-            timeZone: tz,
-            hour: "numeric",
-            minute: "2-digit",
-            hour12: true,
-            timeZoneName: "short",
-        }).format(d);
-    }
+    const fmt = (d: Date, tz: string) =>
+        new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(d);
 
     const todayUTC = (() => {
         const now = new Date();
@@ -88,37 +82,45 @@ function ReinforceWidget() {
     })();
 
     const parsed = parseUtcHHMM(utcInput);
-    let display = null;
-    if (utcInput && !parsed) {
-        display = <div className="text-red-400 text-xs mt-1">Enter 24h UTC like <code>300</code>, <code>1800</code>, or <code>03:00</code>.</div>;
-    } else if (parsed) {
-        const base = new Date(Date.UTC(todayUTC.y, todayUTC.m, todayUTC.d, parsed.h, parsed.m, 0));
-        display = (
-            <div className="text-sm text-green-200/90 leading-6">
-                <div><span className="text-green-400/80">PT:</span> {fmtTZ(base, "America/Los_Angeles")}</div>
-                <div><span className="text-green-400/80">CT:</span> {fmtTZ(base, "America/Chicago")}</div>
-                <div><span className="text-green-400/80">ET:</span> {fmtTZ(base, "America/New_York")}</div>
-            </div>
-        );
-    }
+    const base = parsed ? new Date(Date.UTC(todayUTC.y, todayUTC.m, todayUTC.d, parsed.h, parsed.m, 0)) : null;
 
     return (
-        <div className="rounded-xl border border-green-500/20 bg-black/60 px-3 py-2 w-full max-w-xs">
-            <div className="text-green-300 font-semibold text-sm mb-1">Reinforcement time (UTC → US)</div>
-            <input
-                className="w-full bg-black/60 border border-green-500/30 rounded px-2 py-1 text-green-200 outline-none focus:border-green-400 text-sm"
-                placeholder="e.g. 300, 1800, 03:00 (UTC)"
-                value={utcInput}
-                onChange={(e) => { setUtcInput(e.target.value); setErr(null); }}
-            />
-            {display}
-            {!display && !err && (
-                <div className="text-xs text-green-300/70 mt-1">Auto-DST; shows today’s PT/CT/ET.</div>
+        <div className="fixed z-40 top-6 right-4 sm:right-6">
+            <button
+                onClick={() => setOpen(v => !v)}
+                className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10"
+                title="Convert a UTC time to US timezones"
+            >
+                UTC → PT/CT/ET
+            </button>
+
+            {open && (
+                <div ref={popRef} className="mt-2 w-64 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
+                    <div className="text-green-300 font-semibold text-sm mb-2">Reinforcement time helper</div>
+                    <input
+                        className="w-full bg-black/60 border border-green-500/30 rounded px-2 py-1 text-green-200 outline-none focus:border-green-400 text-sm"
+                        placeholder="e.g. 300, 1800, or 03:00 (UTC)"
+                        value={utcInput}
+                        onChange={(e) => setUtcInput(e.target.value)}
+                        autoFocus
+                    />
+                    {!utcInput && <div className="text-xs text-green-300/70 mt-1">Today’s offsets, auto-DST.</div>}
+                    {utcInput && !parsed && (
+                        <div className="text-red-400 text-xs mt-2">Enter 24h UTC like <code>300</code>, <code>1800</code>, or <code>03:00</code>.</div>
+                    )}
+                    {base && (
+                        <div className="text-sm text-green-200/90 mt-2 space-y-1">
+                            <div><span className="text-green-400/80">PT:</span> {fmt(base, "America/Los_Angeles")}</div>
+                            <div><span className="text-green-400/80">CT:</span> {fmt(base, "America/Chicago")}</div>
+                            <div><span className="text-green-400/80">ET:</span> {fmt(base, "America/New_York")}</div>
+                        </div>
+                    )}
+                </div>
             )}
-            {err && <div className="text-red-400 text-xs mt-1">{err}</div>}
         </div>
     );
 }
+
 
 const ageDaysFromNow = (iso: string) =>
     Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -244,6 +246,7 @@ export default function StructureAge() {
     return (
         <div className="relative z-10 mx-auto max-w-xl px-4 py-10">
             <h1 className="text-2xl font-bold mb-4 text-green-300">Structure Age Estimate</h1>
+            <ReinforcePopover />
 
             <form onSubmit={onSubmit} className="flex gap-2 mb-3">
                 <textarea
@@ -256,9 +259,6 @@ export default function StructureAge() {
                     {loading ? "…" : "Estimate"}
                 </button>
             </form>
-            <div>
-                <ReinforceWidget />
-            </div>
             {(parsedJ || parsedCorp) && (
                 <div className="mb-6 text-green-200 text-base sm:text-lg">
                     {parsedJ && (
