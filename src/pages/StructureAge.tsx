@@ -85,7 +85,7 @@ function ReinforcePopover() {
     const base = parsed ? new Date(Date.UTC(todayUTC.y, todayUTC.m, todayUTC.d, parsed.h, parsed.m, 0)) : null;
 
     return (
-        <div className="fixed z-40 top-6 right-4 sm:right-6">
+        <div className="fixed z-40 top-26 right-4 sm:right-6">
             <button
                 onClick={() => setOpen(v => !v)}
                 className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10"
