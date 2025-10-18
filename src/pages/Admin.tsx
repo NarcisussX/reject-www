@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+
 /* eslint-disable  @typescript-eslint/no-explicit-any */
 type ListItem = {
     jcode: string;
@@ -112,6 +114,14 @@ export default function Admin() {
         <div className="min-h-dvh bg-black text-green-400 font-mono p-6">
             <div className="max-w-6xl mx-auto">
                 <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="mb-3">
+                        <Link
+                            to="/admin/age"
+                            className="inline-block px-3 py-2 border border-green-500/40 rounded hover:bg-green-600/10"
+                        >
+                            Structure age &amp; intel
+                        </Link>
+                    </div>
                     <h1 className="text-2xl">Admin — Ransom Appraisals</h1>
                     <div className="flex items-center gap-2">
                         <button
@@ -326,7 +336,7 @@ function Editor({
     onSaved,
 }: {
     authedFetch: (path: string, init?: RequestInit) => Promise<Response>;
-    editing: Editing;                               
+    editing: Editing;
     setEditing: (e: Editing | null) => void;
     onSaved: () => void;
 }) {
@@ -335,11 +345,11 @@ function Editor({
         e.preventDefault();
         const body = {
             jcode: editing.jcode.toUpperCase(),
-            ransomISK: editing.ransomISK, 
+            ransomISK: editing.ransomISK,
             notes: editing.notes,
             structures: editing.rows.map((r) => ({
                 kind: r.kind,
-                estimatedISK: r.estimatedISK, 
+                estimatedISK: r.estimatedISK,
                 fitText: r.fitText,
             })),
         };
