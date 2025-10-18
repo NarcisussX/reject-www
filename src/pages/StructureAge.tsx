@@ -46,81 +46,293 @@ function humanizeDays(days: number) {
 }
 
 function ReinforcePopover() {
-    const [open, setOpen] = useState(false);
-    const [utcInput, setUtcInput] = useState("");
-    const popRef = useRef<HTMLDivElement | null>(null);
+  const [open, setOpen] = useState(false);
+  const [utcInput, setUtcInput] = useState("");
+  const wrapRef = useOutsideClose<HTMLDivElement>(() => setOpen(false));
 
-    // Close on outside click / Esc
+  function parseUtcHHMM(raw: string) {
+    const s = raw.trim();
+    const d = s.replace(/\D/g, "");
+    let h = 0, m = 0;
+    if (!s) return null;
+    if (/^\d{4}$/.test(d)) { h = +d.slice(0,2); m = +d.slice(2,4); }         // 1800
+    else if (/^\d{3}$/.test(d)) { h = +d.slice(0,1); m = +d.slice(1,3); }     // 300
+    else if (/^\d{1,2}:\d{2}$/.test(s)) { const [hh, mm] = s.split(":"); h=+hh; m=+mm; }
+    else return null;
+    if (h<0 || h>23 || m<0 || m>59) return null;
+    return { h, m };
+  }
+  const fmt = (d: Date, tz: string) =>
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(d);
+
+  const now = new Date();
+  const todayUTC = { y: now.getUTCFullYear(), m: now.getUTCMonth(), d: now.getUTCDate() };
+  const parsed = parseUtcHHMM(utcInput);
+  const base = parsed ? new Date(Date.UTC(todayUTC.y, todayUTC.m, todayUTC.d, parsed.h, parsed.m, 0)) : null;
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10"
+        title="Convert a UTC time to US timezones"
+      >
+        UTC → PT/CT/ET
+      </button>
+
+      {open && (
+        <div className="absolute right-0 mt-2 w-64 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
+          <div className="text-green-300 font-semibold text-sm mb-2">Reinforcement time</div>
+          <input
+            className="w-full bg-black/60 border border-green-500/30 rounded px-2 py-1 text-green-200 outline-none focus:border-green-400 text-sm"
+            placeholder="e.g. 300, 1800, 03:00 (UTC)"
+            value={utcInput}
+            onChange={(e) => setUtcInput(e.target.value)}
+            autoFocus
+          />
+          {!utcInput && <div className="text-xs text-green-300/70 mt-1">Auto-DST; uses today.</div>}
+          {utcInput && !parsed && (
+            <div className="text-red-400 text-xs mt-2">Enter 24h UTC like <code>300</code>, <code>1800</code>, or <code>03:00</code>.</div>
+          )}
+          {base && (
+            <div className="text-sm text-green-200/90 mt-2 space-y-1">
+              <div><span className="text-green-400/80">PT:</span> {fmt(base, "America/Los_Angeles")}</div>
+              <div><span className="text-green-400/80">CT:</span> {fmt(base, "America/Chicago")}</div>
+              <div><span className="text-green-400/80">ET:</span> {fmt(base, "America/New_York")}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/** ---------- helpers used by both popovers ---------- */
+function useOutsideClose<T extends HTMLElement>(onClose: () => void) {
+    const ref = useRef<T | null>(null);
     useEffect(() => {
         const onDoc = (e: MouseEvent) => {
-            if (!popRef.current) return;
-            if (!popRef.current.contains(e.target as Node)) setOpen(false);
+            if (!ref.current) return;
+            if (!ref.current.contains(e.target as Node)) onClose();
         };
-        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+        const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
         document.addEventListener("mousedown", onDoc);
         document.addEventListener("keydown", onKey);
         return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
-    }, []);
+    }, [onClose]);
+    return ref;
+}
 
-    function parseUtcHHMM(raw: string) {
-        const s = raw.trim();
-        if (!s) return null;
-        const d = s.replace(/\D/g, "");
-        let h = 0, m = 0;
-        if (/^\d{4}$/.test(d)) { h = +d.slice(0, 2); m = +d.slice(2, 4); }         // 1800
-        else if (/^\d{3}$/.test(d)) { h = +d.slice(0, 1); m = +d.slice(1, 3); }     // 300
-        else if (/^\d{1,2}:\d{2}$/.test(s)) { const [hh, mm] = s.split(":"); h = +hh; m = +mm; } // 03:00
-        else return null;
-        if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-        return { h, m };
+/** ---------- PRIME-TIME PICKER ---------- */
+function PrimeTimePopover({ jcode }: { jcode?: string }) {
+    const [open, setOpen] = useState(false);
+    const [activity, setActivity] = useState<any | null>(null);
+    const [err, setErr] = useState<string | null>(null);
+    const wrapRef = useOutsideClose<HTMLDivElement>(() => setOpen(false));
+
+    useEffect(() => {
+        if (!open) return;
+        let abort = false;
+        (async () => {
+            try {
+                setErr(null); setActivity(null);
+                if (!jcode) { setErr("Paste a J-code first"); return; }
+                const sys = await fetch(`/api/system-id/${encodeURIComponent(jcode)}`).then(r => r.json());
+                if (!sys?.id) { setErr("Could not resolve system ID"); return; }
+                if (abort) return;
+                const act = await fetch(`/api/zkill-activity/${sys.id}`).then(r => r.json());
+                if (!abort) setActivity(act);
+            } catch (e: any) {
+                if (!abort) setErr(e.message || "Failed to load activity");
+            }
+        })();
+        return () => { abort = true; };
+    }, [open, jcode]);
+
+    function suggestWindows() {
+        if (!activity?.days) return [];
+        const perHour = Array.from({ length: 24 }, (_, h) => {
+            let sum = 0;
+            for (let d = 0; d < activity.days.length; d++) sum += Number(activity[d]?.[h] || 0);
+            return sum;
+        });
+        const bands = [];
+        for (let start = 0; start < 24; start++) {
+            const next = (start + 1) % 24;
+            bands.push({ start, end: next, score: perHour[start] + perHour[next] });
+        }
+        bands.sort((a, b) => a.score - b.score);
+
+        const picks: { day: string; start: number; end: number; score: number }[] = [];
+        const dayNames: string[] = activity.days;
+        const used = new Set<number>();
+        for (const b of bands) {
+            if ([b.start, b.end].some(h => used.has(h))) continue;
+            let bestDay = 0, bestScore = Infinity;
+            for (let d = 0; d < dayNames.length; d++) {
+                const s = Number(activity[d]?.[b.start] || 0) + Number(activity[d]?.[b.end] || 0);
+                if (s < bestScore) { bestScore = s; bestDay = d; }
+            }
+            picks.push({ day: dayNames[bestDay], start: b.start, end: (b.start + 2) % 24, score: b.score });
+            used.add(b.start); used.add(b.end);
+            if (picks.length >= 3) break;
+        }
+        return picks;
     }
-    const fmt = (d: Date, tz: string) =>
-        new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(d);
 
-    const todayUTC = (() => {
-        const now = new Date();
-        return { y: now.getUTCFullYear(), m: now.getUTCMonth(), d: now.getUTCDate() };
-    })();
-
-    const parsed = parseUtcHHMM(utcInput);
-    const base = parsed ? new Date(Date.UTC(todayUTC.y, todayUTC.m, todayUTC.d, parsed.h, parsed.m, 0)) : null;
+    const picks = activity ? suggestWindows() : [];
 
     return (
-        <div className="fixed z-40 top-26 right-4 sm:right-6">
+        <div className="relative" ref={wrapRef}>
             <button
                 onClick={() => setOpen(v => !v)}
-                className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10"
-                title="Convert a UTC time to US timezones"
+                className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10 disabled:opacity-40"
+                disabled={!jcode}
+                title={jcode ? "Suggest quiet 2h windows to bash" : "Paste a J-code first"}
             >
-                Reinforcement Timezone Converter
+                Prime-time
             </button>
 
             {open && (
-                <div ref={popRef} className="mt-2 w-64 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
-                    <div className="text-green-300 font-semibold text-sm mb-2">Reinforcement time helper</div>
-                    <input
-                        className="w-full bg-black/60 border border-green-500/30 rounded px-2 py-1 text-green-200 outline-none focus:border-green-400 text-sm"
-                        placeholder="e.g. 300, 1800, or 03:00 (UTC)"
-                        value={utcInput}
-                        onChange={(e) => setUtcInput(e.target.value)}
-                        autoFocus
-                    />
-                    {!utcInput && <div className="text-xs text-green-300/70 mt-1">Today’s offsets, auto-DST.</div>}
-                    {utcInput && !parsed && (
-                        <div className="text-red-400 text-xs mt-2">Enter 24h UTC like <code>300</code>, <code>1800</code>, or <code>03:00</code>.</div>
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
+                    <div className="text-green-300 font-semibold text-sm mb-2">Prime-time picker</div>
+                    {!err && !activity && <div className="text-sm text-green-200/80">Loading activity…</div>}
+                    {err && <div className="text-red-400 text-sm">{err}</div>}
+                    {!!picks.length && (
+                        <ul className="text-sm text-green-200/90 space-y-1">
+                            {picks.map((p, i) => (
+                                <li key={i}>
+                                    <span className="text-green-400/80">{p.day}</span>{" "}
+                                    {String(p.start).padStart(2, "0")}–{String(p.end).padStart(2, "0")} UTC
+                                    <span className="text-green-500/60"> (low activity)</span>
+                                </li>
+                            ))}
+                        </ul>
                     )}
-                    {base && (
-                        <div className="text-sm text-green-200/90 mt-2 space-y-1">
-                            <div><span className="text-green-400/80">PT:</span> {fmt(base, "America/Los_Angeles")}</div>
-                            <div><span className="text-green-400/80">CT:</span> {fmt(base, "America/Chicago")}</div>
-                            <div><span className="text-green-400/80">ET:</span> {fmt(base, "America/New_York")}</div>
-                        </div>
-                    )}
+                    <div className="mt-2 text-xs text-green-300/70">
+                        Based on zKill last-period heatmap. Uses the 3 lowest 2-hour bands across the week.
+                    </div>
                 </div>
             )}
         </div>
     );
 }
+
+
+/** ---------- DEFENDER TIMEZONE GUESS ---------- */
+function DefenderTZPopover({ corpId, corpName }: { corpId?: number; corpName?: string }) {
+    const [open, setOpen] = useState(false);
+    const [activity, setActivity] = useState<any | null>(null);
+    const [err, setErr] = useState<string | null>(null);
+    const wrapRef = useOutsideClose<HTMLDivElement>(() => setOpen(false));
+
+    useEffect(() => {
+        if (!open) return;
+        let abort = false;
+        (async () => {
+            try {
+                setErr(null); setActivity(null);
+                if (!corpId) { setErr("Paste a corp first"); return; }
+                const act = await fetch(`/api/zkill-corp-activity/${corpId}`).then(r => r.json());
+                if (!abort) setActivity(act);
+            } catch (e: any) { if (!abort) setErr(e.message || "Failed to load corp activity"); }
+        })();
+        return () => { abort = true; };
+    }, [open, corpId]);
+
+    function classifyTZ() {
+        if (!activity?.days) return null;
+        // Sum per hour across days
+        const perHour = Array.from({ length: 24 }, (_, h) => {
+            let sum = 0;
+            for (let d = 0; d < activity.days.length; d++) sum += Number(activity[d]?.[h] || 0);
+            return sum;
+        });
+        const total = perHour.reduce((a, b) => a + b, 0);
+        if (!total) return null;
+
+        // Circular mean hour
+        const toRad = (h: number) => (2 * Math.PI * h) / 24;
+        let X = 0, Y = 0;
+        for (let h = 0; h < 24; h++) {
+            X += perHour[h] * Math.cos(toRad(h));
+            Y += perHour[h] * Math.sin(toRad(h));
+        }
+        let mean = Math.atan2(Y, X) * 24 / (2 * Math.PI);
+        if (mean < 0) mean += 24;
+        const peak = Math.round(mean) % 24;
+
+        // Buckets in UTC (rough)
+        const buckets = [
+            { label: "Americas (US)", range: [23, 6] },  // 23–06
+            { label: "EU", range: [17, 22] }, // 17–22
+            { label: "RU/Eastern EU", range: [13, 17] }, // 13–17
+            { label: "AU/NZ", range: [7, 12] },  // 07–12
+        ];
+        const inRange = (h: number, a: number, b: number) => a <= b ? (h >= a && h <= b) : (h >= a || h <= b);
+        const score = (a: number, b: number) => {
+            let s = 0;
+            for (let h = 0; h < 24; h++) if (inRange(h, a, b)) s += perHour[h];
+            return s;
+        };
+        const scored = buckets.map(b => ({ ...b, s: score(b.range[0], b.range[1]) }));
+        scored.sort((x, y) => y.s - x.s);
+        const top = scored[0];
+        const conf = Math.round((top.s / total) * 100);
+
+        return {
+            label: top.label,
+            peak,
+            conf,
+        };
+    }
+
+    const guess = activity ? classifyTZ() : null;
+
+    return (
+        <div className="relative" ref={wrapRef}>
+            <button
+                onClick={() => setOpen(v => !v)}
+                className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10 disabled:opacity-40"
+                disabled={!corpId}
+                title={corpId ? "Guess defender prime time from corp activity" : "Paste a corp first"}
+            >
+                TZ guess
+            </button>
+
+            {open && (
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
+                    <div className="text-green-300 font-semibold text-sm mb-2">Defender timezone</div>
+                    {!err && !activity && <div className="text-sm text-green-200/80">Loading corp activity…</div>}
+                    {err && <div className="text-red-400 text-sm">{err}</div>}
+                    {guess && (
+                        <div className="text-sm text-green-200/90">
+                            <div><span className="text-green-400/80">Corp:</span> {corpName ?? corpId}</div>
+                            <div><span className="text-green-400/80">Likely zone:</span> <b>{guess.label}</b></div>
+                            <div><span className="text-green-400/80">Peak hour:</span> ~{String(guess.peak).padStart(2, "0")}:00 UTC</div>
+                            <div className="text-green-500/70 text-xs mt-1">Confidence: ~{guess.conf}% (share of activity in that zone)</div>
+                        </div>
+                    )}
+                    <div className="mt-2 text-xs text-green-300/70">
+                        Based on last-period zKill activity. Heuristic; treat as indicative, not proof.
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function IntelToolbar({ jcode, corpId, corpName }: { jcode?: string; corpId?: number; corpName?: string }) {
+  return (
+    <div className="fixed z-40 top-26 right-4 sm:right-6 flex gap-2">
+      <ReinforcePopover />
+      <PrimeTimePopover jcode={jcode} />
+      <DefenderTZPopover corpId={corpId} corpName={corpName} />
+    </div>
+  );
+}
+
 
 
 const ageDaysFromNow = (iso: string) =>
@@ -247,8 +459,7 @@ export default function StructureAge() {
     return (
         <div className="relative z-10 mx-auto max-w-xl px-4 py-10">
             <h1 className="text-2xl font-bold mb-4 text-green-300">Structure Age Estimate</h1>
-            <ReinforcePopover />
-
+            <IntelToolbar jcode={parsedJ} corpId={corpId} corpName={parsedCorp} />
             <form onSubmit={onSubmit} className="flex gap-2 mb-3">
                 <textarea
                     className="flex-1 min-h-[70px] bg-black/60 border border-green-500/30 rounded px-3 py-2 text-green-200 outline-none focus:border-green-400"

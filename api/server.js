@@ -668,6 +668,18 @@ app.get(["/api/zkill-activity/:systemId", "/zkill-activity/:systemId"], async (r
   }
 });
 
+// zKill corporation stats -> activity heatmap
+app.get(["/api/zkill-corp-activity/:corpId", "/zkill-corp-activity/:corpId"], async (req, res) => {
+  try {
+    const corpId = String(req.params.corpId);
+    const stats = await fetchJSON(`https://zkillboard.com/api/stats/corporationID/${corpId}/`);
+    // Return only activity block (days + hour grid)
+    res.json(stats?.activity || null);
+  } catch (e) {
+    res.status(502).json({ error: "zkill corp stats failed" });
+  }
+});
+
 
 // ---- Start server ----
 const port = 4000;
