@@ -74,11 +74,6 @@ function ReinforcePopover() {
       ...(withZone ? { timeZoneName: "short" } : {})
     }).format(d);
 
-  const abbr = (d: Date, tz: string) =>
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" })
-      .formatToParts(d)
-      .find(p => p.type === "timeZoneName")?.value || "";
-
   const localTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
   const todayUTC = { y: now.getUTCFullYear(), m: now.getUTCMonth(), d: now.getUTCDate() };
@@ -95,7 +90,7 @@ function ReinforcePopover() {
       setTimeout(() => setCopied(false), 1200);
     } catch {}
   }
-  const vAbbr = abbr(base, localTZ);
+
   return (
     <div className="relative" ref={wrapRef}>
       <button
@@ -129,7 +124,7 @@ function ReinforcePopover() {
           {base && (
             <div className="text-sm text-green-200/90 mt-2 space-y-1">
               <div><span className="text-green-400/80">INPUT (UTC):</span> {String(parsed!.h).padStart(2,"0")}:{String(parsed!.m).padStart(2,"0")}</div>
-              <div><span className="text-green-400/80">Viewer ({localTZ} {vAbbr}):</span> {fmt(base, localTZ)}</div>
+              <div><span className="text-green-400/80">Viewer ({localTZ}):</span> {fmt(base, localTZ, true)}</div>
               <div><span className="text-green-400/80">Pacific:</span> {fmt(base, "America/Los_Angeles", true)} {/* e.g., PDT/PST */}</div>
               <div><span className="text-green-400/80">Central:</span> {fmt(base, "America/Chicago", true)}</div>
               <div><span className="text-green-400/80">Eastern:</span> {fmt(base, "America/New_York", true)}</div>
