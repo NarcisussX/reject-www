@@ -48,41 +48,68 @@ function humanizeDays(days: number) {
 function ReinforcePopover() {
   const [open, setOpen] = useState(false);
   const [utcInput, setUtcInput] = useState("");
+  const [copied, setCopied] = useState(false);
   const wrapRef = useOutsideClose<HTMLDivElement>(() => setOpen(false));
 
+  // parse "300", "1800", "03:00"
   function parseUtcHHMM(raw: string) {
     const s = raw.trim();
+    if (!s) return null;
     const d = s.replace(/\D/g, "");
     let h = 0, m = 0;
-    if (!s) return null;
-    if (/^\d{4}$/.test(d)) { h = +d.slice(0,2); m = +d.slice(2,4); }         // 1800
-    else if (/^\d{3}$/.test(d)) { h = +d.slice(0,1); m = +d.slice(1,3); }     // 300
+    if (/^\d{4}$/.test(d)) { h = +d.slice(0,2); m = +d.slice(2,4); }
+    else if (/^\d{3}$/.test(d)) { h = +d.slice(0,1); m = +d.slice(1,3); }
     else if (/^\d{1,2}:\d{2}$/.test(s)) { const [hh, mm] = s.split(":"); h=+hh; m=+mm; }
     else return null;
     if (h<0 || h>23 || m<0 || m>59) return null;
     return { h, m };
   }
-  const fmt = (d: Date, tz: string) =>
-    new Intl.DateTimeFormat("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", hour12: true }).format(d);
 
+  const fmt = (d: Date, tz: string, withZone = false) =>
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      ...(withZone ? { timeZoneName: "short" } : {})
+    }).format(d);
+
+  const abbr = (d: Date, tz: string) =>
+    new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "short" })
+      .formatToParts(d)
+      .find(p => p.type === "timeZoneName")?.value || "";
+
+  const localTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const now = new Date();
   const todayUTC = { y: now.getUTCFullYear(), m: now.getUTCMonth(), d: now.getUTCDate() };
+
   const parsed = parseUtcHHMM(utcInput);
   const base = parsed ? new Date(Date.UTC(todayUTC.y, todayUTC.m, todayUTC.d, parsed.h, parsed.m, 0)) : null;
+  const epoch = base ? Math.floor(base.getTime() / 1000) : null;
 
+  async function copyDiscord() {
+    if (!epoch) return;
+    try {
+      await navigator.clipboard.writeText(`<t:${epoch}:t>`);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    } catch {}
+  }
+  const vAbbr = abbr(base, localTZ);
   return (
     <div className="relative" ref={wrapRef}>
       <button
         onClick={() => setOpen(v => !v)}
         className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10"
-        title="Convert a UTC time to US timezones"
+        title="Convert a UTC time to US timezones + make a Discord timecode"
       >
         UTC → PT/CT/ET
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-64 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
+        <div className="absolute right-0 mt-2 w-72 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
           <div className="text-green-300 font-semibold text-sm mb-2">Reinforcement time</div>
+
           <input
             className="w-full bg-black/60 border border-green-500/30 rounded px-2 py-1 text-green-200 outline-none focus:border-green-400 text-sm"
             placeholder="e.g. 300, 1800, 03:00 (UTC)"
@@ -90,15 +117,30 @@ function ReinforcePopover() {
             onChange={(e) => setUtcInput(e.target.value)}
             autoFocus
           />
-          {!utcInput && <div className="text-xs text-green-300/70 mt-1">Auto-DST; uses today.</div>}
+
+          {!utcInput && <div className="text-xs text-green-300/70 mt-1">Today’s date; auto-DST.</div>}
+
           {utcInput && !parsed && (
-            <div className="text-red-400 text-xs mt-2">Enter 24h UTC like <code>300</code>, <code>1800</code>, or <code>03:00</code>.</div>
+            <div className="text-red-400 text-xs mt-2">
+              Enter 24h UTC like <code>300</code>, <code>1800</code>, or <code>03:00</code>.
+            </div>
           )}
+
           {base && (
             <div className="text-sm text-green-200/90 mt-2 space-y-1">
-              <div><span className="text-green-400/80">PT:</span> {fmt(base, "America/Los_Angeles")}</div>
-              <div><span className="text-green-400/80">CT:</span> {fmt(base, "America/Chicago")}</div>
-              <div><span className="text-green-400/80">ET:</span> {fmt(base, "America/New_York")}</div>
+              <div><span className="text-green-400/80">INPUT (UTC):</span> {String(parsed!.h).padStart(2,"0")}:{String(parsed!.m).padStart(2,"0")}</div>
+              <div><span className="text-green-400/80">Viewer ({localTZ} {vAbbr}):</span> {fmt(base, localTZ)}</div>
+              <div><span className="text-green-400/80">Pacific:</span> {fmt(base, "America/Los_Angeles", true)} {/* e.g., PDT/PST */}</div>
+              <div><span className="text-green-400/80">Central:</span> {fmt(base, "America/Chicago", true)}</div>
+              <div><span className="text-green-400/80">Eastern:</span> {fmt(base, "America/New_York", true)}</div>
+
+              <button
+                onClick={copyDiscord}
+                className="mt-2 w-full text-xs border border-green-500/30 hover:border-green-400 rounded px-2 py-1 text-green-200 hover:bg-green-500/10"
+                title="Copy Discord timecode"
+              >
+                {copied ? "Copied!" : `Copy Discord timecode  <t:${epoch}:t>`}
+              </button>
             </div>
           )}
         </div>
@@ -191,12 +233,12 @@ function PrimeTimePopover({ jcode }: { jcode?: string }) {
                 disabled={!jcode}
                 title={jcode ? "Suggest quiet 2h windows to bash" : "Paste a J-code first"}
             >
-                Prime-time
+                Best TZ to hit
             </button>
 
             {open && (
                 <div className="absolute right-0 mt-2 w-72 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
-                    <div className="text-green-300 font-semibold text-sm mb-2">Prime-time picker</div>
+                    <div className="text-green-300 font-semibold text-sm mb-2">Lowest Prime-time picker</div>
                     {!err && !activity && <div className="text-sm text-green-200/80">Loading activity…</div>}
                     {err && <div className="text-red-400 text-sm">{err}</div>}
                     {!!picks.length && (
@@ -298,12 +340,12 @@ function DefenderTZPopover({ corpId, corpName }: { corpId?: number; corpName?: s
                 disabled={!corpId}
                 title={corpId ? "Guess defender prime time from corp activity" : "Paste a corp first"}
             >
-                TZ guess
+                Defender TZ
             </button>
 
             {open && (
                 <div className="absolute right-0 mt-2 w-72 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
-                    <div className="text-green-300 font-semibold text-sm mb-2">Defender timezone</div>
+                    <div className="text-green-300 font-semibold text-sm mb-2">Defender timezone guess</div>
                     {!err && !activity && <div className="text-sm text-green-200/80">Loading corp activity…</div>}
                     {err && <div className="text-red-400 text-sm">{err}</div>}
                     {guess && (
@@ -315,7 +357,7 @@ function DefenderTZPopover({ corpId, corpName }: { corpId?: number; corpName?: s
                         </div>
                     )}
                     <div className="mt-2 text-xs text-green-300/70">
-                        Based on last-period zKill activity. Heuristic; treat as indicative, not proof.
+                        Based on last-period zKill activity.
                     </div>
                 </div>
             )}
