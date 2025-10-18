@@ -17,7 +17,7 @@ const router = createBrowserRouter([
       { index: true, element: <Home /> },
       { path: "j/:jcode", element: <JCode /> },
       { path: "admin", element: <Admin /> },
-      { path: "age", element: <StructureAge />}
+      { path: "admin/age", element: <StructureAge />}
     ],
   },
 ]);

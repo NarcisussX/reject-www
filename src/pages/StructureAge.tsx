@@ -46,102 +46,102 @@ function humanizeDays(days: number) {
 }
 
 function ReinforcePopover() {
-  const [open, setOpen] = useState(false);
-  const [utcInput, setUtcInput] = useState("");
-  const [copied, setCopied] = useState(false);
-  const wrapRef = useOutsideClose<HTMLDivElement>(() => setOpen(false));
+    const [open, setOpen] = useState(false);
+    const [utcInput, setUtcInput] = useState("");
+    const [copied, setCopied] = useState(false);
+    const wrapRef = useOutsideClose<HTMLDivElement>(() => setOpen(false));
 
-  // parse "300", "1800", "03:00"
-  function parseUtcHHMM(raw: string) {
-    const s = raw.trim();
-    if (!s) return null;
-    const d = s.replace(/\D/g, "");
-    let h = 0, m = 0;
-    if (/^\d{4}$/.test(d)) { h = +d.slice(0,2); m = +d.slice(2,4); }
-    else if (/^\d{3}$/.test(d)) { h = +d.slice(0,1); m = +d.slice(1,3); }
-    else if (/^\d{1,2}:\d{2}$/.test(s)) { const [hh, mm] = s.split(":"); h=+hh; m=+mm; }
-    else return null;
-    if (h<0 || h>23 || m<0 || m>59) return null;
-    return { h, m };
-  }
+    // parse "300", "1800", "03:00"
+    function parseUtcHHMM(raw: string) {
+        const s = raw.trim();
+        if (!s) return null;
+        const d = s.replace(/\D/g, "");
+        let h = 0, m = 0;
+        if (/^\d{4}$/.test(d)) { h = +d.slice(0, 2); m = +d.slice(2, 4); }
+        else if (/^\d{3}$/.test(d)) { h = +d.slice(0, 1); m = +d.slice(1, 3); }
+        else if (/^\d{1,2}:\d{2}$/.test(s)) { const [hh, mm] = s.split(":"); h = +hh; m = +mm; }
+        else return null;
+        if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+        return { h, m };
+    }
 
-  const fmt = (d: Date, tz: string, withZone = false) =>
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-      ...(withZone ? { timeZoneName: "short" } : {})
-    }).format(d);
+    const fmt = (d: Date, tz: string, withZone = false) =>
+        new Intl.DateTimeFormat("en-US", {
+            timeZone: tz,
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+            ...(withZone ? { timeZoneName: "short" } : {})
+        }).format(d);
 
-  const localTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const now = new Date();
-  const todayUTC = { y: now.getUTCFullYear(), m: now.getUTCMonth(), d: now.getUTCDate() };
+    const localTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const now = new Date();
+    const todayUTC = { y: now.getUTCFullYear(), m: now.getUTCMonth(), d: now.getUTCDate() };
 
-  const parsed = parseUtcHHMM(utcInput);
-  const base = parsed ? new Date(Date.UTC(todayUTC.y, todayUTC.m, todayUTC.d, parsed.h, parsed.m, 0)) : null;
-  const epoch = base ? Math.floor(base.getTime() / 1000) : null;
+    const parsed = parseUtcHHMM(utcInput);
+    const base = parsed ? new Date(Date.UTC(todayUTC.y, todayUTC.m, todayUTC.d, parsed.h, parsed.m, 0)) : null;
+    const epoch = base ? Math.floor(base.getTime() / 1000) : null;
 
-  async function copyDiscord() {
-    if (!epoch) return;
-    try {
-      await navigator.clipboard.writeText(`<t:${epoch}:t>`);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {}
-  }
+    async function copyDiscord() {
+        if (!epoch) return;
+        try {
+            await navigator.clipboard.writeText(`<t:${epoch}:t>`);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+        } catch { }
+    }
 
-  return (
-    <div className="relative" ref={wrapRef}>
-      <button
-        onClick={() => setOpen(v => !v)}
-        className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10"
-        title="Convert a UTC time to US timezones + make a Discord timecode"
-      >
-        UTC → PT/CT/ET
-      </button>
+    return (
+        <div className="relative" ref={wrapRef}>
+            <button
+                onClick={() => setOpen(v => !v)}
+                className="px-3 py-1 rounded-full text-xs border border-green-500/40 bg-black/60 text-green-200 hover:bg-green-500/10"
+                title="Convert a UTC time to US timezones + make a Discord timecode"
+            >
+                UTC → PT/CT/ET
+            </button>
 
-      {open && (
-        <div className="absolute right-0 mt-2 w-72 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
-          <div className="text-green-300 font-semibold text-sm mb-2">Reinforcement time</div>
+            {open && (
+                <div className="absolute right-0 mt-2 w-72 rounded-xl border border-green-500/30 bg-black/80 p-3 shadow-xl backdrop-blur-sm">
+                    <div className="text-green-300 font-semibold text-sm mb-2">Reinforcement time</div>
 
-          <input
-            className="w-full bg-black/60 border border-green-500/30 rounded px-2 py-1 text-green-200 outline-none focus:border-green-400 text-sm"
-            placeholder="e.g. 300, 1800, 03:00 (UTC)"
-            value={utcInput}
-            onChange={(e) => setUtcInput(e.target.value)}
-            autoFocus
-          />
+                    <input
+                        className="w-full bg-black/60 border border-green-500/30 rounded px-2 py-1 text-green-200 outline-none focus:border-green-400 text-sm"
+                        placeholder="e.g. 300, 1800, 03:00 (UTC)"
+                        value={utcInput}
+                        onChange={(e) => setUtcInput(e.target.value)}
+                        autoFocus
+                    />
 
-          {!utcInput && <div className="text-xs text-green-300/70 mt-1">Today’s date; auto-DST.</div>}
+                    {!utcInput && <div className="text-xs text-green-300/70 mt-1">Today’s date; auto-DST.</div>}
 
-          {utcInput && !parsed && (
-            <div className="text-red-400 text-xs mt-2">
-              Enter 24h UTC like <code>300</code>, <code>1800</code>, or <code>03:00</code>.
-            </div>
-          )}
+                    {utcInput && !parsed && (
+                        <div className="text-red-400 text-xs mt-2">
+                            Enter 24h UTC like <code>300</code>, <code>1800</code>, or <code>03:00</code>.
+                        </div>
+                    )}
 
-          {base && (
-            <div className="text-sm text-green-200/90 mt-2 space-y-1">
-              <div><span className="text-green-400/80">INPUT (UTC):</span> {String(parsed!.h).padStart(2,"0")}:{String(parsed!.m).padStart(2,"0")}</div>
-              <div><span className="text-green-400/80">Viewer ({localTZ}):</span> {fmt(base, localTZ, true)}</div>
-              <div><span className="text-green-400/80">Pacific:</span> {fmt(base, "America/Los_Angeles", true)} {/* e.g., PDT/PST */}</div>
-              <div><span className="text-green-400/80">Central:</span> {fmt(base, "America/Chicago", true)}</div>
-              <div><span className="text-green-400/80">Eastern:</span> {fmt(base, "America/New_York", true)}</div>
+                    {base && (
+                        <div className="text-sm text-green-200/90 mt-2 space-y-1">
+                            <div><span className="text-green-400/80">INPUT (UTC):</span> {String(parsed!.h).padStart(2, "0")}:{String(parsed!.m).padStart(2, "0")}</div>
+                            <div><span className="text-green-400/80">Viewer ({localTZ}):</span> {fmt(base, localTZ, true)}</div>
+                            <div><span className="text-green-400/80">Pacific:</span> {fmt(base, "America/Los_Angeles", true)} {/* e.g., PDT/PST */}</div>
+                            <div><span className="text-green-400/80">Central:</span> {fmt(base, "America/Chicago", true)}</div>
+                            <div><span className="text-green-400/80">Eastern:</span> {fmt(base, "America/New_York", true)}</div>
 
-              <button
-                onClick={copyDiscord}
-                className="mt-2 w-full text-xs border border-green-500/30 hover:border-green-400 rounded px-2 py-1 text-green-200 hover:bg-green-500/10"
-                title="Copy Discord timecode"
-              >
-                {copied ? "Copied!" : `Copy Discord timecode  <t:${epoch}:t>`}
-              </button>
-            </div>
-          )}
+                            <button
+                                onClick={copyDiscord}
+                                className="mt-2 w-full text-xs border border-green-500/30 hover:border-green-400 rounded px-2 py-1 text-green-200 hover:bg-green-500/10"
+                                title="Copy Discord timecode"
+                            >
+                                {copied ? "Copied!" : `Copy Discord timecode  <t:${epoch}:t>`}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
-      )}
-    </div>
-  );
+    );
 }
 
 
@@ -361,16 +361,14 @@ function DefenderTZPopover({ corpId, corpName }: { corpId?: number; corpName?: s
 }
 
 function IntelToolbar({ jcode, corpId, corpName }: { jcode?: string; corpId?: number; corpName?: string }) {
-  return (
-    <div className="fixed z-40 top-26 right-4 sm:right-6 flex gap-2">
-      <ReinforcePopover />
-      <PrimeTimePopover jcode={jcode} />
-      <DefenderTZPopover corpId={corpId} corpName={corpName} />
-    </div>
-  );
+    return (
+        <div className="fixed z-40 top-26 right-4 sm:right-6 flex gap-2">
+            <ReinforcePopover />
+            <PrimeTimePopover jcode={jcode} />
+            <DefenderTZPopover corpId={corpId} corpName={corpName} />
+        </div>
+    );
 }
-
-
 
 const ageDaysFromNow = (iso: string) =>
     Math.round((Date.now() - new Date(iso).getTime()) / 86_400_000);
@@ -379,6 +377,34 @@ type AgeResp = {
     id: string; method: "exact" | "interpolate" | "extrapolate-head" | "extrapolate-tail";
     midISO: string; lowISO: string; highISO: string; daysWide: string;
 };
+
+const AUTH_KEY = "reject.admin.auth";
+
+function AdminLogin({ onAuthed }: { onAuthed: (b64: string) => void }) {
+    const [u, setU] = useState(""); const [p, setP] = useState(""); const [err, setErr] = useState("");
+    async function submit(e: React.FormEvent) {
+        e.preventDefault(); setErr("");
+        const b64 = btoa(`${u}:${p}`);
+        const r = await fetch("/api/admin/systems", { headers: { Authorization: "Basic " + b64 } });
+        if (r.status === 401 || r.status === 403) { setErr("Invalid credentials"); return; }
+        sessionStorage.setItem(AUTH_KEY, b64); onAuthed(b64);
+    }
+    return (
+        <div className="min-h-dvh bg-black text-green-400 font-mono grid place-items-center p-6">
+            <form onSubmit={submit} className="w-full max-w-sm border border-green-500/40 rounded p-4 bg-black">
+                <h1 className="text-xl mb-3">Admin login</h1>
+                <input value={u} onChange={e => setU(e.target.value)} placeholder="User"
+                    className="w-full bg-black border border-green-500/40 rounded px-3 py-2 mb-2" />
+                <input value={p} onChange={e => setP(e.target.value)} placeholder="Password" type="password"
+                    className="w-full bg-black border border-green-500/40 rounded px-3 py-2" />
+                {err && <div className="mt-2 text-red-300">{err}</div>}
+                <div className="mt-3 flex justify-end">
+                    <button className="px-3 py-2 bg-green-600 text-black font-bold rounded">Enter</button>
+                </div>
+            </form>
+        </div>
+    );
+}
 
 export default function StructureAge() {
     const [input, setInput] = useState("");
@@ -391,6 +417,8 @@ export default function StructureAge() {
     const [parsedCorp, setParsedCorp] = useState<string | undefined>();
     const [corpId, setCorpId] = useState<number | undefined>();
     const [corpResolving, setCorpResolving] = useState(false);
+    const [authB64, setAuthB64] = useState<string | null>(() => sessionStorage.getItem(AUTH_KEY));
+    if (!authB64) return <AdminLogin onAuthed={setAuthB64} />;
 
     async function onSubmit(e: React.FormEvent) {
         e.preventDefault();
