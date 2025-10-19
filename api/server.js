@@ -959,7 +959,7 @@ async function safeFetchJSON(url) {
 }
 const jf = typeof fetchJSON === "function" ? fetchJSON : safeFetchJSON;
 
-// --- digest runner (rich embed, includes item.note) ---
+// --- digest runner (embeds for active + embeds for inactive) ---
 let _digestRunning = false;
 /** runWatchlistDigest({ dryRun?: boolean, seconds?: number, jcode?: string }) */
 async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
@@ -970,26 +970,59 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
     const listAll = getWatchlist();
     const list = jcode ? listAll.filter(it => it.jcode === String(jcode).toUpperCase()) : listAll;
     const seen = getSeenCorps();
+
+    const post = async (payload) => {
+      if (dryRun || !hook) return;
+      await fetch(hook, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    };
+
+    const activeEmbeds = [];     // embeds for systems with >=1 kill
+    const inactiveEmbeds = [];   // embeds for systems with 0 kills in window
     const reports = [];
 
     for (const item of list) {
       // window seconds: min(since-added, 24h), >= 60s; allow override
-      const addedAtMs = Date.parse(item.addedAt) || Date.now();
-      const sinceAdded = Math.max(0, Math.floor((Date.now() - addedAtMs) / 1000));
-      const s = Math.max(60, Math.min(Number.isFinite(seconds) ? seconds : (sinceAdded || 86400), 86400));
-      const cutoff = Date.now() - s * 1000;
+      const addedAtMs   = Date.parse(item.addedAt) || Date.now();
+      const sinceAdded  = Math.max(0, Math.floor((Date.now() - addedAtMs) / 1000));
+      const s           = Math.max(60, Math.min(Number.isFinite(seconds) ? seconds : (sinceAdded || 86400), 86400));
+      const cutoff      = Date.now() - s * 1000;
+      const windowHours = Math.max(1, Math.floor(s / 3600));
+      const cutoffUnix  = Math.floor(cutoff / 1000);
 
-      // 1) base list from your working endpoint
+      // 1) base list (your working endpoint)
       const base = (await jf(`https://zkillboard.com/api/solarSystemID/${item.systemId}/`)) || [];
 
-      // 2) filter to the window by killmail_time
+      // 2) filter to window
       const recent = base.filter(k => {
         const t = Date.parse(k?.killmail_time);
         return Number.isFinite(t) && t >= cutoff;
       });
       const count = recent.length;
 
-      // 3) expand a subset to discover new corps (victim + attackers)
+      if (count === 0) {
+        // Inactive → make a compact embed
+        inactiveEmbeds.push({
+          title: `${item.jcode} — No activity`,
+          url: `https://zkillboard.com/system/${item.systemId}/`,
+          description: item.note ? `**Note:** ${item.note}` : undefined,
+          color: 0x6b7280, // gray
+          fields: [
+            { name: "Window", value: `Last ${windowHours}h • since <t:${cutoffUnix}:R>`, inline: true },
+            { name: "Kills", value: "0", inline: true },
+          ],
+          footer: { text: "reject.app watchlist" },
+          timestamp: new Date().toISOString(),
+        });
+
+        reports.push({ jcode: item.jcode, systemId: item.systemId, count, seconds: s, newCorps: 0 });
+        continue;
+      }
+
+      // Active → expand subset to find new corps
       const details = await Promise.allSettled(
         recent.slice(0, 40).map(k =>
           jf(`https://esi.evetech.net/latest/killmails/${k.killmail_id}/${k.zkb.hash}/?datasource=tranquility`)
@@ -1008,7 +1041,7 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
       newCorps.forEach(cid => (seenForJ[cid] = true));
       seen[item.jcode] = seenForJ;
 
-      // 4) compact UTC hour bar
+      // hour bar
       const perHour = new Array(24).fill(0);
       for (const k of recent) {
         const t = Date.parse(k?.killmail_time);
@@ -1016,50 +1049,58 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
         perHour[new Date(t).getUTCHours()]++;
       }
       const codeHeat = v => (v <= 0 ? "·" : v <= 2 ? "░" : v <= 5 ? "▒" : "▓");
-      const heatbar = recent.length
-        ? "```\n " + perHour.map(codeHeat).join("") + "\n```"
-        : "";
+      const heatbar = "```\n " + perHour.map(codeHeat).join("") + "\n```";
 
-      // 5) build a rich embed
-      const windowHours = Math.max(1, Math.floor(s / 3600));
-      const cutoffUnix = Math.floor(cutoff / 1000);
-      const newCorpsLinks = newCorps.slice(0, 8).map(cid => `[${cid}](https://zkillboard.com/corporation/${cid}/)`).join('\n');
+      const newCorpsLinks = newCorps.slice(0, 8)
+        .map(cid => `[${cid}](https://zkillboard.com/corporation/${cid}/)`).join('\n');
       const moreNote = newCorps.length > 8 ? `\n…and ${newCorps.length - 8} more` : "";
 
-      const embed = {
+      activeEmbeds.push({
         title: `${item.jcode} — Daily digest`,
         url: `https://zkillboard.com/system/${item.systemId}/`,
-        description: item.note ? `**Note:** ${item.note}` : undefined,  // <= includes your saved note
+        description: item.note ? `**Note:** ${item.note}` : undefined,
         color: 0x00ff88,
         fields: [
           { name: "Window", value: `Last ${windowHours}h • since <t:${cutoffUnix}:R>`, inline: true },
           { name: "Kills", value: String(count), inline: true },
           { name: "New corps", value: String(newCorps.length), inline: true },
           ...(newCorps.length ? [{ name: "New corps (links)", value: (newCorpsLinks + moreNote).slice(0, 1024), inline: false }] : []),
-          ...(heatbar ? [{ name: "UTC hours (last window)", value: heatbar, inline: false }] : []),
+          { name: "UTC hours (last window)", value: heatbar, inline: false },
         ],
         footer: { text: "reject.app watchlist" },
         timestamp: new Date().toISOString(),
-      };
-
-      // 6) post (one embed per system) unless dryRun
-      if (!dryRun && hook) {
-        await fetch(hook, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: "Watchlist", embeds: [embed] }),
-        });
-      }
+      });
 
       reports.push({ jcode: item.jcode, systemId: item.systemId, count, seconds: s, newCorps: newCorps.length });
     }
 
+    // persist "seen corps"
     setSeenCorps(seen);
-    return { ok: true, reports };
+
+    // ---- POSTING (respect Discord limits) ----
+    if (!dryRun && hook) {
+      // Active: batch by 10 embeds per message
+      for (let i = 0; i < activeEmbeds.length; i += 10) {
+        await post({ username: "Watchlist", embeds: activeEmbeds.slice(i, i + 10) });
+      }
+      // Inactive: also batch by 10 embeds per message (rich, bundled)
+      for (let i = 0; i < inactiveEmbeds.length; i += 10) {
+        await post({ username: "Watchlist", embeds: inactiveEmbeds.slice(i, i + 10) });
+      }
+    }
+
+    return {
+      ok: true,
+      reports,
+      postedActive: activeEmbeds.length,
+      postedInactive: inactiveEmbeds.length,
+    };
   } finally {
     _digestRunning = false;
   }
 }
+
+
 
 
 // ---- Nightly digest 00:00 UTC ----
