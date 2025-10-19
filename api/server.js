@@ -847,7 +847,7 @@ app.get(["/api/watchlist", "/watchlist"], (req, res) => {
 app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   const J = String(req.body?.jcode || '').toUpperCase();
   if (!/^J\d{6}$/.test(J)) return res.status(400).json({ error: 'Invalid J-code' });
-  const note = clampNote(req.body?.note);   
+  const note = clampNote(req.body?.note);
   let list = getWatchlist();
   if (list.some(x => x.jcode === J)) return res.status(200).json({ ok: true }); // already present
 
@@ -986,12 +986,12 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
 
     for (const item of list) {
       // window seconds: min(since-added, 24h), >= 60s; allow override
-      const addedAtMs   = Date.parse(item.addedAt) || Date.now();
-      const sinceAdded  = Math.max(0, Math.floor((Date.now() - addedAtMs) / 1000));
-      const s           = Math.max(60, Math.min(Number.isFinite(seconds) ? seconds : (sinceAdded || 86400), 86400));
-      const cutoff      = Date.now() - s * 1000;
+      const addedAtMs = Date.parse(item.addedAt) || Date.now();
+      const sinceAdded = Math.max(0, Math.floor((Date.now() - addedAtMs) / 1000));
+      const s = Math.max(60, Math.min(Number.isFinite(seconds) ? seconds : (sinceAdded || 86400), 86400));
+      const cutoff = Date.now() - s * 1000;
       const windowHours = Math.max(1, Math.floor(s / 3600));
-      const cutoffUnix  = Math.floor(cutoff / 1000);
+      const cutoffUnix = Math.floor(cutoff / 1000);
 
       // 1) base list (your working endpoint)
       const base = (await jf(`https://zkillboard.com/api/solarSystemID/${item.systemId}/`)) || [];
@@ -1041,16 +1041,6 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
       newCorps.forEach(cid => (seenForJ[cid] = true));
       seen[item.jcode] = seenForJ;
 
-      // hour bar
-      const perHour = new Array(24).fill(0);
-      for (const k of recent) {
-        const t = Date.parse(k?.killmail_time);
-        if (!Number.isFinite(t)) continue;
-        perHour[new Date(t).getUTCHours()]++;
-      }
-      const codeHeat = v => (v <= 0 ? "·" : v <= 2 ? "░" : v <= 5 ? "▒" : "▓");
-      const heatbar = "```\n " + perHour.map(codeHeat).join("") + "\n```";
-
       const newCorpsLinks = newCorps.slice(0, 8)
         .map(cid => `[${cid}](https://zkillboard.com/corporation/${cid}/)`).join('\n');
       const moreNote = newCorps.length > 8 ? `\n…and ${newCorps.length - 8} more` : "";
@@ -1064,12 +1054,16 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
           { name: "Window", value: `Last ${windowHours}h • since <t:${cutoffUnix}:R>`, inline: true },
           { name: "Kills", value: String(count), inline: true },
           { name: "New corps", value: String(newCorps.length), inline: true },
-          ...(newCorps.length ? [{ name: "New corps (links)", value: (newCorpsLinks + moreNote).slice(0, 1024), inline: false }] : []),
-          { name: "UTC hours (last window)", value: heatbar, inline: false },
+          ...(newCorps.length ? [{
+            name: "New corps (links)",
+            value: (newCorpsLinks + moreNote).slice(0, 1024),
+            inline: false
+          }] : []),
         ],
         footer: { text: "reject.app watchlist" },
         timestamp: new Date().toISOString(),
       });
+
 
       reports.push({ jcode: item.jcode, systemId: item.systemId, count, seconds: s, newCorps: newCorps.length });
     }
@@ -1104,7 +1098,7 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
 
 
 // ---- Nightly digest 00:00 UTC ----
-cron.schedule('0 0 * * *', () => { runWatchlistDigest().catch(() => {}); }, { timezone: 'UTC' });
+cron.schedule('0 0 * * *', () => { runWatchlistDigest().catch(() => { }); }, { timezone: 'UTC' });
 
 // Accept GET or POST, and both with/without /api prefix
 app.all(
@@ -1114,8 +1108,8 @@ app.all(
     try {
       // query or body
       const dry = req.query.dry === '1' || req.body?.dryRun === true;
-      const s   = req.query.s ? Number(req.query.s) : (Number.isFinite(req.body?.seconds) ? Number(req.body.seconds) : undefined);
-      const j   = req.query.j ? String(req.query.j).toUpperCase() : (req.body?.jcode ? String(req.body.jcode).toUpperCase() : undefined);
+      const s = req.query.s ? Number(req.query.s) : (Number.isFinite(req.body?.seconds) ? Number(req.body.seconds) : undefined);
+      const j = req.query.j ? String(req.query.j).toUpperCase() : (req.body?.jcode ? String(req.body.jcode).toUpperCase() : undefined);
 
       console.log('[watchlist/_run] dry=%s s=%s j=%s', dry, s, j);
 
