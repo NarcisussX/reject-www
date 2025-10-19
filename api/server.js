@@ -80,13 +80,45 @@ function setSeenCorps(map) {
 
 // --- ESI + zKill helpers ---
 async function resolveSystemId(jcode) {
-  // ESI strict search → system ID
-  const u = `https://esi.evetech.net/latest/search/?categories=solar_system&search=${jcode}&strict=true`;
-  const r = await fetch(u);
-  if (!r.ok) return null;
-  const j = await r.json();
-  return Array.isArray(j?.solar_system) && j.solar_system[0] ? j.solar_system[0] : null;
+  const m = String(jcode || "").toUpperCase().match(/J\d{6}/);
+  if (!m) return null;
+  const J = m[0];
+
+  try {
+    // Preferred: POST /universe/ids (ESI returns { systems: [...] })
+    let r = await fetch(
+      "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify([J]),
+      }
+    );
+    if (r.ok) {
+      const d = await r.json();
+      const arr = d.systems || d.solar_systems || []; // some libs used the old key
+      const hit = arr.find(s => String(s.name).toUpperCase() === J);
+      if (hit?.id) return hit.id;
+    }
+
+    // Fallback: strict search
+    const qs = new URLSearchParams({
+      categories: "solar_system",
+      search: J,
+      strict: "true",
+      datasource: "tranquility",
+    }).toString();
+    r = await fetch(`https://esi.evetech.net/latest/search/?${qs}`);
+    if (r.ok) {
+      const j = await r.json();
+      if (Array.isArray(j?.solar_system) && j.solar_system.length) return j.solar_system[0];
+    }
+  } catch {
+    // ignore
+  }
+  return null;
 }
+
 
 const zkill = (parts) => `https://zkillboard.com/api/${parts.join('/')}/`;
 
@@ -765,12 +797,12 @@ app.get(["/api/zkill-corp-activity/:corpId", "/zkill-corp-activity/:corpId"], as
 // ---- Watchlist API ----
 
 // GET list (no auth needed if you prefer, but you can add requireAdmin)
-app.get(['/api/watchlist', '/watchlist'], (req, res) => {
+app.get(["/api/watchlist", "/watchlist"], (req, res) => {
   res.json(getWatchlist());
 });
 
 // POST add { jcode }
-app.post(['/api/watchlist', '/watchlist'], requireAdmin, async (req, res) => {
+app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   const J = String(req.body?.jcode || '').toUpperCase();
   if (!/^J\d{6}$/.test(J)) return res.status(400).json({ error: 'Invalid J-code' });
 
@@ -819,7 +851,7 @@ app.post(['/api/watchlist', '/watchlist'], requireAdmin, async (req, res) => {
 });
 
 // DELETE /api/watchlist/:jcode
-app.delete(['/api/watchlist/:jcode', '/watchlist/:jcode'], requireAdmin, (req, res) => {
+app.delete(["/api/watchlist/:jcode", "/watchlist/:jcode"], requireAdmin, (req, res) => {
   const J = String(req.params.jcode || '').toUpperCase();
   const list = getWatchlist();
   const next = list.filter(x => x.jcode !== J);

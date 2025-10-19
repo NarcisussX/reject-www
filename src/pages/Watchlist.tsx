@@ -26,7 +26,7 @@ export default function Watchlist() {
   async function refresh() {
     setLoading(true);
     try {
-      const r = await fetch(`/api/watchlist`);
+      const r = await fetch(`/watchlist`);
       setList(await r.json());
     } finally { setLoading(false); }
   }
