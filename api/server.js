@@ -959,7 +959,7 @@ async function safeFetchJSON(url) {
 }
 const jf = typeof fetchJSON === "function" ? fetchJSON : safeFetchJSON;
 
-// --- digest runner ---
+// --- digest runner (rich embed, includes item.note) ---
 let _digestRunning = false;
 /** runWatchlistDigest({ dryRun?: boolean, seconds?: number, jcode?: string }) */
 async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
@@ -979,7 +979,7 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
       const s = Math.max(60, Math.min(Number.isFinite(seconds) ? seconds : (sinceAdded || 86400), 86400));
       const cutoff = Date.now() - s * 1000;
 
-      // 1) base list from the SAME working endpoint you already use
+      // 1) base list from your working endpoint
       const base = (await jf(`https://zkillboard.com/api/solarSystemID/${item.systemId}/`)) || [];
 
       // 2) filter to the window by killmail_time
@@ -1017,28 +1017,37 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
       }
       const codeHeat = v => (v <= 0 ? "·" : v <= 2 ? "░" : v <= 5 ? "▒" : "▓");
       const heatbar = recent.length
-        ? "```\nUTC hours (last window)\n " + perHour.map(codeHeat).join("") + "\n```"
+        ? "```\n " + perHour.map(codeHeat).join("") + "\n```"
         : "";
 
-      const lines = [
-        `**${item.jcode}** — new activity: **${count} kill${count === 1 ? "" : "s"}** in the last ${Math.floor(s / 3600)}h`,
-        `<https://zkillboard.com/system/${item.systemId}/>`,
-      ];
-      if (newCorps.length) {
-        const corpLinks = newCorps.slice(0, 8).map(cid => `New corp: <https://zkillboard.com/corporation/${cid}/>`);
-        lines.push("", ...corpLinks);
-        if (newCorps.length > 8) lines.push(`…and ${newCorps.length - 8} more`);
-      }
-      if (heatbar) lines.push("", heatbar);
+      // 5) build a rich embed
+      const windowHours = Math.max(1, Math.floor(s / 3600));
+      const cutoffUnix = Math.floor(cutoff / 1000);
+      const newCorpsLinks = newCorps.slice(0, 8).map(cid => `[${cid}](https://zkillboard.com/corporation/${cid}/)`).join('\n');
+      const moreNote = newCorps.length > 8 ? `\n…and ${newCorps.length - 8} more` : "";
 
-      const content = lines.join("\n");
+      const embed = {
+        title: `${item.jcode} — Daily digest`,
+        url: `https://zkillboard.com/system/${item.systemId}/`,
+        description: item.note ? `**Note:** ${item.note}` : undefined,  // <= includes your saved note
+        color: 0x00ff88,
+        fields: [
+          { name: "Window", value: `Last ${windowHours}h • since <t:${cutoffUnix}:R>`, inline: true },
+          { name: "Kills", value: String(count), inline: true },
+          { name: "New corps", value: String(newCorps.length), inline: true },
+          ...(newCorps.length ? [{ name: "New corps (links)", value: (newCorpsLinks + moreNote).slice(0, 1024), inline: false }] : []),
+          ...(heatbar ? [{ name: "UTC hours (last window)", value: heatbar, inline: false }] : []),
+        ],
+        footer: { text: "reject.app watchlist" },
+        timestamp: new Date().toISOString(),
+      };
 
-      // ✅ actually post to the webhook if not a dry run
+      // 6) post (one embed per system) unless dryRun
       if (!dryRun && hook) {
         await fetch(hook, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: "Watchlist", content }),
+          body: JSON.stringify({ username: "Watchlist", embeds: [embed] }),
         });
       }
 
