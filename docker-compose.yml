@@ -43,7 +43,7 @@ services:
     volumes:
       - reject_data:/data
       - reject_api_data:/app/data:rw
-    entrypoint: ["/app/entrypoint.sh"]  
+    entrypoint: ["/bin/sh", "/app/entrypoint.sh"]
     networks:
       - tw_web
     restart: unless-stopped
