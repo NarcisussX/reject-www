@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 
 /* eslint-disable  @typescript-eslint/no-explicit-any */
 type ListItem = {
@@ -114,13 +113,15 @@ export default function Admin() {
         <div className="min-h-dvh bg-black text-green-400 font-mono p-6">
             <div className="max-w-6xl mx-auto">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="mb-3">
-                        <Link
-                            to="/admin/age"
-                            className="inline-block px-3 py-2 border border-green-500/40 rounded hover:bg-green-600/10"
-                        >
-                            Structure age &amp; intel
-                        </Link>
+                    <div className="flex items-center gap-2">
+                        <a href="/admin/age"
+                            className="px-3 py-2 border border-green-500/40 rounded hover:bg-green-600/10">
+                            Structure age & intel
+                        </a>
+                        <a href="/admin/watchlist"
+                            className="px-3 py-2 border border-green-500/40 rounded hover:bg-green-600/10">
+                            Watchlist
+                        </a>
                     </div>
                     <h1 className="text-2xl">Admin — Ransom Appraisals</h1>
                     <div className="flex items-center gap-2">

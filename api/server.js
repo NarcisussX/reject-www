@@ -3,6 +3,8 @@ try { await import('dotenv/config'); } catch { }
 import express from 'express';
 import helmet from 'helmet';
 import Database from 'better-sqlite3';
+import cron from 'node-cron';
+import fetch from 'node-fetch';
 
 // ---- Express app & middleware ----
 const app = express();
@@ -49,6 +51,87 @@ try {
     db.exec(`ALTER TABLE systems ADD COLUMN ransomed INTEGER NOT NULL DEFAULT 0`);
   }
 } catch {}
+
+// -------- Watchlist storage --------
+const DATA_DIR = process.env.DATA_DIR || '/app/data';
+const WATCHLIST_PATH = path.join(DATA_DIR, 'watchlist.json');
+const SEEN_CORPS_PATH = path.join(DATA_DIR, 'watchlist_seen_corps.json'); // { [J]: { [corpId]: true } }
+
+function readJSON(p, fallback) {
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; }
+}
+function writeJSON(p, obj) {
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(obj, null, 2));
+}
+
+function getWatchlist() {
+  return readJSON(WATCHLIST_PATH, []); // [{ jcode, systemId, addedAt }]
+}
+function setWatchlist(list) {
+  writeJSON(WATCHLIST_PATH, list);
+}
+function getSeenCorps() {
+  return readJSON(SEEN_CORPS_PATH, {}); // { JCODE: { '12345': true, ... } }
+}
+function setSeenCorps(map) {
+  writeJSON(SEEN_CORPS_PATH, map);
+}
+
+// --- ESI + zKill helpers ---
+async function resolveSystemId(jcode) {
+  // ESI strict search → system ID
+  const u = `https://esi.evetech.net/latest/search/?categories=solar_system&search=${jcode}&strict=true`;
+  const r = await fetch(u);
+  if (!r.ok) return null;
+  const j = await r.json();
+  return Array.isArray(j?.solar_system) && j.solar_system[0] ? j.solar_system[0] : null;
+}
+
+const zkill = (parts) => `https://zkillboard.com/api/${parts.join('/')}/`;
+
+async function killsLast24h(systemId) {
+  const r = await fetch(zkill([`solarSystemID`, String(systemId), `pastSeconds`, `86400`]));
+  if (!r.ok) return { count: 0, rows: [] };
+  const rows = await r.json();
+  return { count: rows.length, rows };
+}
+
+// Fetch detailed killmails (victim + attackers) to learn corp IDs.
+// We keep it modestly parallel; last 24h in WH space is usually small.
+async function expandKillmail(k) {
+  try {
+    const esi = `https://esi.evetech.net/latest/killmails/${k.killmail_id}/${k.zkb.hash}/`;
+    const r = await fetch(esi);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch { return null; }
+}
+
+function codeHeat(value) { // simple 3-shade block for discord code blocks
+  if (value <= 0) return '·';
+  if (value <= 2) return '░';
+  if (value <= 5) return '▒';
+  return '▓';
+}
+
+// Render a tiny 7×24 ascii heatmap text (Sun..Sat rows).
+function toAsciiHeatmap(activityMatrix /* number[7][24] */) {
+  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const lines = ['Killboard activity (UTC)'];
+  for (let d = 0; d < 7; d++) {
+    let row = days[d].padEnd(3, ' ') + ' ';
+    for (let h = 0; h < 24; h++) row += codeHeat(activityMatrix[d]?.[h] || 0);
+    lines.push(row);
+  }
+  return '```\n' + lines.join('\n') + '\n```';
+}
+
+async function discordWebhook(payload) {
+  const url = process.env.WATCHLIST_WEBHOOK_URL;
+  if (!url) return;
+  await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+}
 
 
 function formatISKShort(n) {
@@ -679,6 +762,136 @@ app.get(["/api/zkill-corp-activity/:corpId", "/zkill-corp-activity/:corpId"], as
     res.status(502).json({ error: "zkill corp stats failed" });
   }
 });
+// ---- Watchlist API ----
+
+// GET list (no auth needed if you prefer, but you can add requireAdmin)
+app.get('/api/watchlist', (req, res) => {
+  res.json(getWatchlist());
+});
+
+// POST add { jcode }
+app.post('/api/watchlist', requireAdmin, async (req, res) => {
+  const J = String(req.body?.jcode || '').toUpperCase();
+  if (!/^J\d{6}$/.test(J)) return res.status(400).json({ error: 'Invalid J-code' });
+
+  let list = getWatchlist();
+  if (list.some(x => x.jcode === J)) return res.status(200).json({ ok: true }); // already present
+
+  // resolve system ID
+  const systemId = await resolveSystemId(J);
+  if (!systemId) return res.status(404).json({ error: 'System not found' });
+
+  const item = { jcode: J, systemId, addedAt: new Date().toISOString() };
+  list.push(item);
+  setWatchlist(list);
+
+  // quick “intel blurb”: last 61d kills + recent corps (best-effort)
+  // re-use your existing summary util if you have it. If not, do a light version here:
+  const r = await fetch(zkill(['solarSystemID', String(systemId)]));
+  let total = 0, byDay = {}, corps = new Map();
+  if (r.ok) {
+    const data = await r.json();
+    const now = Date.now();
+    for (const k of data) {
+      const t = new Date(k.killmail_time || k.zkb?.published || 0).getTime();
+      if (!t || (now - t) / 86400000 > 61) continue;
+      total++;
+      const dayKey = new Date(t).toISOString().slice(0,10);
+      byDay[dayKey] = (byDay[dayKey] || 0) + 1;
+      if (k.victim?.corporation_id) corps.set(k.victim.corporation_id, k.victim.corporation_id);
+    }
+  }
+  const lastKillAgo = Object.keys(byDay).length
+    ? Math.round((Date.now() - new Date(Object.keys(byDay).sort().pop()).getTime())/86400000)
+    : null;
+
+  const text = [
+    `**${J}** added to watchlist`,
+    `[zKillboard](https://zkillboard.com/system/${item.systemId}/)`,
+    '',
+    `**Kills / Recent Kill**`,
+    `${total} kills in last 61 days, the last one was ${lastKillAgo ?? 'N/A'} days ago`,
+  ].join('\n');
+
+  await discordWebhook({ username: 'Watchlist', content: text });
+
+  res.status(201).json(item);
+});
+
+// DELETE /api/watchlist/:jcode
+app.delete('/api/watchlist/:jcode', requireAdmin, (req, res) => {
+  const J = String(req.params.jcode || '').toUpperCase();
+  const list = getWatchlist();
+  const next = list.filter(x => x.jcode !== J);
+  if (next.length === list.length) return res.sendStatus(404);
+  setWatchlist(next);
+  res.sendStatus(204);
+});
+// ---- Nightly digest 00:00 UTC ----
+cron.schedule('0 0 * * *', async () => {
+  const url = process.env.WATCHLIST_WEBHOOK_URL;
+  if (!url) return;
+
+  const list = getWatchlist();
+  if (!list.length) return;
+
+  const seen = getSeenCorps();
+
+  for (const item of list) {
+    try {
+      const { count, rows } = await killsLast24h(item.systemId);
+
+      // gather any new corps from detailed killmails
+      const detail = await Promise.all(rows.slice(0, 40).map(expandKillmail)); // hard cap to be gentle
+      const corps24h = new Set();
+      for (const km of detail) {
+        if (!km) continue;
+        if (km.victim?.corporation_id) corps24h.add(String(km.victim.corporation_id));
+        for (const a of km.attackers || []) {
+          if (a?.corporation_id) corps24h.add(String(a.corporation_id));
+        }
+      }
+
+      const seenForJ = seen[item.jcode] || {};
+      const newCorps = [...corps24h].filter(cid => !seenForJ[cid]);
+      newCorps.forEach(cid => (seenForJ[cid] = true));
+      seen[item.jcode] = seenForJ;
+      setSeenCorps(seen);
+
+      // optional teeny ascii heatmap from zKill’s 61d feed (coarse)
+      let heatmapText = '';
+      try {
+        const all = await (await fetch(zkill(['solarSystemID', String(item.systemId)]))).json();
+        const mat = Array.from({ length: 7 }, () => Array(24).fill(0));
+        const now = Date.now();
+        for (const k of all) {
+          const ts = new Date(k.killmail_time || k.zkb?.published || 0).getTime();
+          if (!ts || (now - ts) > 61 * 86400000) continue;
+          const d = new Date(ts);
+          mat(d.getUTCDay())[d.getUTCHours()]++;
+        }
+        heatmapText = toAsciiHeatmap(mat);
+      } catch {}
+
+      const lines = [
+        `**${item.jcode}** — new activity: **${count} kill${count===1?'':'s'}** in the last 24h`,
+        `<https://zkillboard.com/system/${item.systemId}/>`,
+      ];
+
+      if (newCorps.length) {
+        const corpLinks = newCorps.slice(0, 8).map(cid => `New corp: <https://zkillboard.com/corporation/${cid}/>`);
+        lines.push('', ...corpLinks);
+        if (newCorps.length > 8) lines.push(`…and ${newCorps.length - 8} more`);
+      }
+
+      if (heatmapText) lines.push('', heatmapText);
+
+      await discordWebhook({ username: 'Watchlist', content: lines.join('\n') });
+    } catch (e) {
+      // swallow one system’s failure and continue
+    }
+  }
+}, { timezone: 'UTC' });
 
 
 // ---- Start server ----

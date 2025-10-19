@@ -8,6 +8,7 @@ import JCode from "./pages/JCode";
 import Admin from "./pages/Admin";
 import "./styles.css";
 import StructureAge from "./pages/StructureAge";
+import Watchlist from "./pages/Watchlist";
 
 const router = createBrowserRouter([
   {
@@ -17,7 +18,8 @@ const router = createBrowserRouter([
       { index: true, element: <Home /> },
       { path: "j/:jcode", element: <JCode /> },
       { path: "admin", element: <Admin /> },
-      { path: "admin/age", element: <StructureAge />}
+      { path: "admin/age", element: <StructureAge />},
+      { path: "/admin/watchlist", element:  <Watchlist />}
     ],
   },
 ]);
