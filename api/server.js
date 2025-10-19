@@ -855,7 +855,7 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   const systemId = await resolveSystemId(J);
   if (!systemId) return res.status(404).json({ error: 'System not found' });
 
-  const item = { jcode: J, systemId, addedAt: new Date().toISOString() };
+  const item = { jcode: J, systemId, addedAt: new Date().toISOString(), ...(note ? { note } : {}) };
   list.push(item);
   setWatchlist(list);
 
