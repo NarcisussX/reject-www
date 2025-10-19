@@ -61,6 +61,12 @@ const UA_HEADERS = {
   Accept: "application/json",
   "User-Agent": "RejectWatchlist/1.0 (+reject.app)",
 };
+const clampNote = (s) => {
+  const t = String(s ?? "").trim();
+  return t ? t.slice(0, 50) : "";
+};
+
+const compact = (o) => JSON.parse(JSON.stringify(o)); // strips undefined for embeds
 
 const fetchZkillArray = async (url) => {
   try {
@@ -841,7 +847,7 @@ app.get(["/api/watchlist", "/watchlist"], (req, res) => {
 app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   const J = String(req.body?.jcode || '').toUpperCase();
   if (!/^J\d{6}$/.test(J)) return res.status(400).json({ error: 'Invalid J-code' });
-
+  const note = clampNote(req.body?.note);   
   let list = getWatchlist();
   if (list.some(x => x.jcode === J)) return res.status(200).json({ ok: true }); // already present
 
@@ -901,18 +907,32 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
     return "```\n" + lines.join("\n") + "\n```";
   };
 
-  const text = [
-    `**${J}** added to watchlist`,
-    `<https://zkillboard.com/system/${systemId}/>`,
-    "",
-    `**Kills / Recent Kill**`,
-    `${totalKills} kill${totalKills === 1 ? "" : "s"} in last ${MAX_AGE_DAYS} days, the last one was ${lastKillAgo ?? "N/A"} days ago`,
-    "",
-    toAsciiHeatmap(mat),
-  ].join("\n");
+  // --------- NEW: rich embed payload ----------
+  const embed = compact({
+    title: `${J} added to watchlist`,
+    url: `https://zkillboard.com/system/${systemId}/`,
+    description: note ? `**Note:** ${note}` : undefined,
+    color: 0x00ff88,
+    fields: [
+      {
+        name: "Kills / Recent Kill",
+        value: `${totalKills} kill${totalKills === 1 ? "" : "s"} in last 60 days, the last one was ${lastKillAgo ?? "N/A"} days ago`,
+        inline: false
+      },
+      {
+        name: "Heatmap (UTC)",
+        value: toAsciiHeatmap(mat).slice(0, 1024), // field value limit
+        inline: false
+      }
+    ],
+    timestamp: new Date().toISOString(),
+    footer: { text: "reject.app watchlist" }
+  });
 
-  await discordWebhook({ username: "Watchlist", content: text });
-
+  await discordWebhook({
+    username: "Watchlist",
+    embeds: [embed]
+  });
 
   res.status(201).json(item);
 });

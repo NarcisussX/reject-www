@@ -3,12 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 
 const AUTH_KEY = "reject.admin.auth";
 
-type Item = { jcode: string; systemId: number; addedAt: string };
+type Item = { jcode: string; note: string; systemId: number; addedAt: string };
 
 export default function Watchlist() {
     const [authB64, setAuthB64] = useState<string | null>(() => sessionStorage.getItem(AUTH_KEY));
     const [list, setList] = useState<Item[]>([]);
     const [input, setInput] = useState("");
+    const [note, setNote] = useState("");
     const [loading, setLoading] = useState(false);
     const [err, setErr] = useState("");
 
@@ -38,7 +39,7 @@ export default function Watchlist() {
         const r = await authedFetch(`/watchlist`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ jcode: J }),
+            body: JSON.stringify({ jcode: J, note: note || undefined }),
         });
         if (!r.ok) {
             const j = await r.json().catch(() => ({}));
@@ -46,6 +47,7 @@ export default function Watchlist() {
             return;
         }
         setInput("");
+        setNote("");   
         refresh();
     }
 
@@ -69,6 +71,15 @@ export default function Watchlist() {
                         placeholder="J113057"
                         className="bg-black border border-green-500/40 rounded px-3 py-2"
                     />
+
+                    <input
+                        value={note}
+                        onChange={(e) => setNote(e.target.value.slice(0, 50))}
+                        placeholder="Optional note (50 chars)"
+                        maxLength={50}
+                        className="bg-black border border-green-500/40 rounded px-3 py-2 w-64"
+                    />
+
                     <button onClick={add} className="px-3 py-2 bg-green-600 text-black font-bold rounded">
                         Save
                     </button>
@@ -81,7 +92,7 @@ export default function Watchlist() {
                 <div className="mt-4 border border-green-500/20 rounded overflow-hidden">
                     <table className="w-full text-left">
                         <thead className="bg-green-900/20">
-                            <tr><th className="px-3 py-2">J-code</th><th className="px-3 py-2">System ID</th><th className="px-3 py-2">Added</th><th /></tr>
+                            <tr><th className="px-3 py-2">J-code</th><th className="px-3 py-2">Note</th><th className="px-3 py-2">System ID</th><th className="px-3 py-2">Added</th><th /></tr>
                         </thead>
                         <tbody>
                             {loading ? (
@@ -92,6 +103,7 @@ export default function Watchlist() {
                                 list.map((it) => (
                                     <tr key={it.jcode} className="border-t border-green-500/10">
                                         <td className="px-3 py-2">{it.jcode}</td>
+                                        <td className="px-3 py-2">{it.note ?? "-"}</td>
                                         <td className="px-3 py-2">{it.systemId}</td>
                                         <td className="px-3 py-2">{new Date(it.addedAt).toLocaleString()}</td>
                                         <td className="px-3 py-2 text-right">
