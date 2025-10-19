@@ -828,6 +828,7 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   setWatchlist(list);
 
   // --- intel blurb using startTime/<YYYY-MM-DD> ---
+  // --- intel blurb using startTime/<YYYY-MM-DD> with safe parsing ---
   const since = new Date(Date.now() - 61 * 86400000).toISOString().slice(0, 10);
   const statsUrl = `https://zkillboard.com/api/solarSystemID/${systemId}/startTime/${since}/`;
 
@@ -839,22 +840,31 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
         "User-Agent": "RejectWatchlist/1.0 (+reject.app)",
       },
     });
-    if (rr.ok) rows = await rr.json();
+
+    if (rr.ok) {
+      const ct = rr.headers.get("content-type") || "";
+      if (ct.includes("application/json")) {
+        const payload = await rr.json().catch(() => null);
+        if (Array.isArray(payload)) rows = payload;
+        // else: leave rows = []
+      } else {
+        // Non-JSON (e.g., HTML/CF), ignore safely
+        await rr.text().catch(() => "");
+      }
+    }
   } catch {
-    // ignore; we'll post with zeros
+    // network error -> leave rows=[]
   }
 
   const count = rows.length;
-
-  // zKill is newest-first; use first row for "recent kill"
   const lastKillAgo = count
-    ? Math.round((Date.now() - Date.parse(rows[0].killmail_time)) / 86400000)
+    ? Math.round((Date.now() - Date.parse(rows[0]?.killmail_time)) / 86400000)
     : null;
 
-  // Build a 7×24 UTC heatmap from the rows
+  // 7×24 heatmap
   const mat = Array.from({ length: 7 }, () => Array(24).fill(0));
   for (const k of rows) {
-    const t = Date.parse(k.killmail_time);
+    const t = Date.parse(k?.killmail_time);
     if (!t) continue;
     const d = new Date(t);
     mat[d.getUTCDay()][d.getUTCHours()]++;
@@ -880,7 +890,6 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   ].join("\n");
 
   await discordWebhook({ username: "Watchlist", content: text });
-
 
   res.status(201).json(item);
 });

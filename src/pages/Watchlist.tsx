@@ -35,7 +35,7 @@ export default function Watchlist() {
         setErr("");
         const J = input.trim().toUpperCase();
         if (!/^J\d{6}$/.test(J)) { setErr("Enter a J-code like J123456"); return; }
-        const r = await authedFetch(`/api/watchlist`, {
+        const r = await authedFetch(`/watchlist`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ jcode: J }),
@@ -51,7 +51,7 @@ export default function Watchlist() {
 
     async function del(jcode: string) {
         if (!confirm(`Remove ${jcode} from watchlist?`)) return;
-        const r = await authedFetch(`/api/watchlist/${jcode}`, { method: "DELETE" });
+        const r = await authedFetch(`/watchlist/${jcode}`, { method: "DELETE" });
         if (r.ok) refresh();
     }
 
