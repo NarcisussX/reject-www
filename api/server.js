@@ -50,7 +50,7 @@ try {
   if (!cols.includes('ransomed')) {
     db.exec(`ALTER TABLE systems ADD COLUMN ransomed INTEGER NOT NULL DEFAULT 0`);
   }
-} catch {}
+} catch { }
 
 // -------- Watchlist storage --------
 const DATA_DIR = process.env.DATA_DIR || '/app/data';
@@ -159,7 +159,7 @@ function codeHeat(value) { // simple 3-shade block for discord code blocks
 
 // Render a tiny 7×24 ascii heatmap text (Sun..Sat rows).
 function toAsciiHeatmap(activityMatrix /* number[7][24] */) {
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const lines = ['Killboard activity (UTC)'];
   for (let d = 0; d < 7; d++) {
     let row = days[d].padEnd(3, ' ') + ' ';
@@ -188,7 +188,7 @@ function parseISK(x) {
   if (typeof x === 'number' && isFinite(x)) return Math.round(x);
   const s = String(x ?? '').trim().toLowerCase().replace(/[, _]/g, '');
   if (!s) return 0;
-  const m = s.match(/^(\d+(?:\.\d+)?)([kmb])?$/); 
+  const m = s.match(/^(\d+(?:\.\d+)?)([kmb])?$/);
   let n;
   if (m) {
     n = parseFloat(m[1]);
@@ -197,7 +197,7 @@ function parseISK(x) {
     if (suf === 'm') n *= 1e6;
     if (suf === 'b') n *= 1e9;
   } else {
-    n = Number(s); 
+    n = Number(s);
   }
   if (!isFinite(n)) return 0;
   return Math.round(n);
@@ -413,8 +413,8 @@ app.get('/admin/systems', requireAdmin, (req, res) => {
       totalStructuresISK: Number(r.totalStructuresISK) || 0,
       created_at: r.created_at,
       updated_at: r.updated_at,
-      evicted: !!Number(r.evicted),    
-      ransomed: !!Number(r.ransomed), 
+      evicted: !!Number(r.evicted),
+      ransomed: !!Number(r.ransomed),
     }))
   );
 });
@@ -444,8 +444,8 @@ import path from 'path';
 // CONFIG
 const AGE_CSV_PATH = process.env.A4E_AGE_CSV || path.join(process.cwd(), 'data', 'a4e_first_seen_monotone.csv');
 
-let AGE_IDS = [];      
-let AGE_EPOCHS = [];   
+let AGE_IDS = [];
+let AGE_EPOCHS = [];
 
 // CSV reader
 function loadAgeCSV(p) {
@@ -506,11 +506,11 @@ function estimateAgeRange(structIdBigInt) {
     const bIdx = hasLo ? AGE_IDS.length - 1 : 1;
     const did = Number(AGE_IDS[bIdx] - AGE_IDS[aIdx]);
     const dts = AGE_EPOCHS[bIdx] - AGE_EPOCHS[aIdx];
-    const slope = did ? (dts / did) : 0; 
+    const slope = did ? (dts / did) : 0;
     const base = hasLo ? AGE_EPOCHS[bIdx] : AGE_EPOCHS[aIdx];
     const off = Number(structIdBigInt - (hasLo ? AGE_IDS[bIdx] : AGE_IDS[aIdx]));
     const ts = Math.round(base + slope * off);
-    const pad = 7 * 86400; 
+    const pad = 7 * 86400;
     return { method: hasLo ? 'extrapolate-tail' : 'extrapolate-head', ts, low: ts - pad, high: ts + pad };
   }
 
@@ -524,8 +524,8 @@ function estimateAgeRange(structIdBigInt) {
 
   // Uncertainty heuristic:
   const gap = Math.abs(hiTs - loTs);
-  const half = Math.round(gap * 0.25);             
-  const pad = clamp(half, 2 * 86400, 7 * 86400);    
+  const half = Math.round(gap * 0.25);
+  const pad = clamp(half, 2 * 86400, 7 * 86400);
   return { method: 'interpolate', ts, low: ts - pad, high: ts + pad };
 }
 
@@ -558,7 +558,7 @@ app.get('/age/:id', (req, res) => {
 });
 
 // --- Corp name -> corp ID via ESI search (cached) ---
-const corpCache = new Map(); 
+const corpCache = new Map();
 
 app.get(["/api/corp-id", "/corp-id"], async (req, res) => {
   const name = String(req.query.name || "").trim();
@@ -640,7 +640,7 @@ async function fetchJSON(url, init = {}) {
 }
 
 // Resolve J-code to systemId
-const systemCache = new Map(); 
+const systemCache = new Map();
 
 app.get(["/api/system-id/:jcode", "/system-id/:jcode"], async (req, res) => {
   const raw = String(req.params.jcode || "").toUpperCase();
@@ -719,7 +719,7 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
       return corpNameCache.get(id);
     }
 
-    const corpActivity = new Map(); 
+    const corpActivity = new Map();
     let totalKills = 0;
     let mostRecent = null;
     let oldest = null;
@@ -738,7 +738,7 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
 
         const t = dayjs(kill.killmail_time);
         mostRecent = !mostRecent || t.isAfter(mostRecent) ? t : mostRecent;
-        oldest     = !oldest     || t.isBefore(oldest)    ? t : oldest;
+        oldest = !oldest || t.isBefore(oldest) ? t : oldest;
 
         const age = now.diff(t, "day");
         if (age > MAX_AGE_DAYS) {
@@ -775,7 +775,7 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
       totalKills,
       daysCovered: oldest ? now.diff(oldest, "day") : 0,
       mostRecentKillDaysAgo: mostRecent ? now.diff(mostRecent, "day") : null,
-      activeCorporations: corps.sort((a,b) => a.lastSeenDaysAgo - b.lastSeenDaysAgo)
+      activeCorporations: corps.sort((a, b) => a.lastSeenDaysAgo - b.lastSeenDaysAgo)
     });
   } catch (e) {
     res.status(502).json({ error: "killboard summary failed" });
@@ -827,35 +827,60 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   list.push(item);
   setWatchlist(list);
 
-  // quick “intel blurb”: last 61d kills + recent corps (best-effort)
-  // re-use your existing summary util if you have it. If not, do a light version here:
-  const r = await fetch(zkill(['solarSystemID', String(systemId)]));
-  let total = 0, byDay = {}, corps = new Map();
-  if (r.ok) {
-    const data = await r.json();
-    const now = Date.now();
-    for (const k of data) {
-      const t = new Date(k.killmail_time || k.zkb?.published || 0).getTime();
-      if (!t || (now - t) / 86400000 > 61) continue;
-      total++;
-      const dayKey = new Date(t).toISOString().slice(0,10);
-      byDay[dayKey] = (byDay[dayKey] || 0) + 1;
-      if (k.victim?.corporation_id) corps.set(k.victim.corporation_id, k.victim.corporation_id);
-    }
+  // --- intel blurb using startTime/<YYYY-MM-DD> ---
+  const since = new Date(Date.now() - 61 * 86400000).toISOString().slice(0, 10);
+  const statsUrl = `https://zkillboard.com/api/solarSystemID/${systemId}/startTime/${since}/`;
+
+  let rows = [];
+  try {
+    const rr = await fetch(statsUrl, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "RejectWatchlist/1.0 (+reject.app)",
+      },
+    });
+    if (rr.ok) rows = await rr.json();
+  } catch {
+    // ignore; we'll post with zeros
   }
-  const lastKillAgo = Object.keys(byDay).length
-    ? Math.round((Date.now() - new Date(Object.keys(byDay).sort().pop()).getTime())/86400000)
+
+  const count = rows.length;
+
+  // zKill is newest-first; use first row for "recent kill"
+  const lastKillAgo = count
+    ? Math.round((Date.now() - Date.parse(rows[0].killmail_time)) / 86400000)
     : null;
+
+  // Build a 7×24 UTC heatmap from the rows
+  const mat = Array.from({ length: 7 }, () => Array(24).fill(0));
+  for (const k of rows) {
+    const t = Date.parse(k.killmail_time);
+    if (!t) continue;
+    const d = new Date(t);
+    mat[d.getUTCDay()][d.getUTCHours()]++;
+  }
+  const codeHeat = (v) => (v <= 0 ? "·" : v <= 2 ? "░" : v <= 5 ? "▒" : "▓");
+  const toAsciiHeatmap = (m) => {
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const lines = ["Killboard activity (UTC)"];
+    for (let di = 0; di < 7; di++) {
+      lines.push(days[di].padEnd(3, " ") + " " + m[di].map(codeHeat).join(""));
+    }
+    return "```\n" + lines.join("\n") + "\n```";
+  };
 
   const text = [
     `**${J}** added to watchlist`,
-    `[zKillboard](https://zkillboard.com/system/${item.systemId}/)`,
-    '',
+    `<https://zkillboard.com/system/${systemId}/>`,
+    "",
     `**Kills / Recent Kill**`,
-    `${total} kills in last 61 days, the last one was ${lastKillAgo ?? 'N/A'} days ago`,
-  ].join('\n');
+    `${count} kill${count === 1 ? "" : "s"} in last 61 days, the last one was ${lastKillAgo ?? "N/A"} days ago`,
+    "",
+    toAsciiHeatmap(mat),
+  ].join("\n");
 
-  await discordWebhook({ username: 'Watchlist', content: text });
+  await discordWebhook({ username: "Watchlist", content: text });
+
 
   res.status(201).json(item);
 });
@@ -913,10 +938,10 @@ cron.schedule('0 0 * * *', async () => {
           mat(d.getUTCDay())[d.getUTCHours()]++;
         }
         heatmapText = toAsciiHeatmap(mat);
-      } catch {}
+      } catch { }
 
       const lines = [
-        `**${item.jcode}** — new activity: **${count} kill${count===1?'':'s'}** in the last 24h`,
+        `**${item.jcode}** — new activity: **${count} kill${count === 1 ? '' : 's'}** in the last 24h`,
         `<https://zkillboard.com/system/${item.systemId}/>`,
       ];
 
