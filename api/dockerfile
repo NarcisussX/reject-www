@@ -3,7 +3,10 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data /app/seed
+COPY seed/a4e_first_seen_monotone.csv /app/seed/a4e_first_seen_monotone.csv
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 COPY package*.json ./
 RUN npm ci --omit=dev
 
