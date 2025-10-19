@@ -1036,13 +1036,28 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
 // ---- Nightly digest 00:00 UTC ----
 cron.schedule('0 0 * * *', () => { runWatchlistDigest().catch(() => {}); }, { timezone: 'UTC' });
 
-app.post(['/api/admin/watchlist/_run', '/admin/watchlist/_run'], requireAdmin, async (req, res) => {
-  const dry = req.query.dry === '1' || req.body?.dryRun === true;
-  const s   = req.query.s ? Number(req.query.s) : undefined;              // window seconds override
-  const j   = req.query.j ? String(req.query.j).toUpperCase() : undefined; // only this J-code
-  const out = await runWatchlistDigest({ dryRun: dry, seconds: s, jcode: j });
-  res.json(out);
-});
+// Accept GET or POST, and both with/without /api prefix
+app.all(
+  ['/api/admin/watchlist/_run', '/admin/watchlist/_run'],
+  requireAdmin,
+  async (req, res) => {
+    try {
+      // query or body
+      const dry = req.query.dry === '1' || req.body?.dryRun === true;
+      const s   = req.query.s ? Number(req.query.s) : (Number.isFinite(req.body?.seconds) ? Number(req.body.seconds) : undefined);
+      const j   = req.query.j ? String(req.query.j).toUpperCase() : (req.body?.jcode ? String(req.body.jcode).toUpperCase() : undefined);
+
+      console.log('[watchlist/_run] dry=%s s=%s j=%s', dry, s, j);
+
+      const out = await runWatchlistDigest({ dryRun: dry, seconds: s, jcode: j });
+      res.status(200).json(out);
+    } catch (e) {
+      console.error('[watchlist/_run] error:', e);
+      res.status(500).json({ ok: false, error: e?.message || String(e) });
+    }
+  }
+);
+
 
 
 // ---- Start server ----
