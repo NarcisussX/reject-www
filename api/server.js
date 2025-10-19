@@ -57,6 +57,33 @@ const DATA_DIR = process.env.DATA_DIR || '/app/data';
 const WATCHLIST_PATH = path.join(DATA_DIR, 'watchlist.json');
 const SEEN_CORPS_PATH = path.join(DATA_DIR, 'watchlist_seen_corps.json'); // { [J]: { [corpId]: true } }
 
+const UA_HEADERS = {
+  Accept: "application/json",
+  "User-Agent": "RejectWatchlist/1.0 (+reject.app)",
+};
+
+const fetchZkillArray = async (url) => {
+  try {
+    const r = await fetch(url, { headers: UA_HEADERS });
+    if (!r.ok) return [];
+    const ct = r.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) { await r.text().catch(() => ""); return []; }
+    const j = await r.json().catch(() => null);
+    return Array.isArray(j) ? j : [];
+  } catch { return []; }
+};
+
+const ymdHiUTC = (d) => {
+  const pad = (n, w = 2) => String(n).padStart(w, "0");
+  return (
+    d.getUTCFullYear() +
+    pad(d.getUTCMonth() + 1) +
+    pad(d.getUTCDate()) +
+    pad(d.getUTCHours()) +
+    pad(d.getUTCMinutes())
+  );
+};
+
 function readJSON(p, fallback) {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; }
 }
@@ -697,7 +724,6 @@ app.get(["/api/system-id/:jcode", "/system-id/:jcode"], async (req, res) => {
 });
 
 
-// Killboard summary (mirrors your tiff.tools util)
 app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], async (req, res) => {
   try {
     const systemId = String(req.params.systemId);
@@ -829,31 +855,22 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
 
   // --- intel blurb using startTime/<YYYY-MM-DD> ---
   // --- intel blurb using startTime/<YYYY-MM-DD> with safe parsing ---
-  const since = new Date(Date.now() - 61 * 86400000).toISOString().slice(0, 10);
-  const statsUrl = `https://zkillboard.com/api/solarSystemID/${systemId}/startTime/${since}/`;
+  // --- intel blurb (zKill startTime with YmdHi, fallback to limit/200) ---
+  const sinceDate = new Date(Date.now() - 61 * 86400000); // 61 days back (UTC)
+  const startKey = ymdHiUTC(sinceDate);                  // e.g. 20250819 00:00 -> "202508190000"
+  const urlPrimary = `https://zkillboard.com/api/solarSystemID/${systemId}/startTime/${startKey}/`;
+  const urlFallback = `https://zkillboard.com/api/solarSystemID/${systemId}/limit/200/`;
 
-  let rows = [];
-  try {
-    const rr = await fetch(statsUrl, {
-      headers: {
-        Accept: "application/json",
-        "User-Agent": "RejectWatchlist/1.0 (+reject.app)",
-      },
-    });
-
-    if (rr.ok) {
-      const ct = rr.headers.get("content-type") || "";
-      if (ct.includes("application/json")) {
-        const payload = await rr.json().catch(() => null);
-        if (Array.isArray(payload)) rows = payload;
-        // else: leave rows = []
-      } else {
-        // Non-JSON (e.g., HTML/CF), ignore safely
-        await rr.text().catch(() => "");
-      }
+  let rows = await fetchZkillArray(urlPrimary);
+  if (!rows.length) {
+    const latest = await fetchZkillArray(urlFallback);
+    if (latest.length) {
+      const cutoff = Date.now() - 61 * 86400000;
+      rows = latest.filter(k => {
+        const t = Date.parse(k?.killmail_time);
+        return Number.isFinite(t) && t >= cutoff;
+      });
     }
-  } catch {
-    // network error -> leave rows=[]
   }
 
   const count = rows.length;
@@ -861,11 +878,11 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
     ? Math.round((Date.now() - Date.parse(rows[0]?.killmail_time)) / 86400000)
     : null;
 
-  // 7×24 heatmap
+  // Build 7×24 UTC heatmap from the rows
   const mat = Array.from({ length: 7 }, () => Array(24).fill(0));
   for (const k of rows) {
     const t = Date.parse(k?.killmail_time);
-    if (!t) continue;
+    if (!Number.isFinite(t)) continue;
     const d = new Date(t);
     mat[d.getUTCDay()][d.getUTCHours()]++;
   }
@@ -873,9 +890,7 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   const toAsciiHeatmap = (m) => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const lines = ["Killboard activity (UTC)"];
-    for (let di = 0; di < 7; di++) {
-      lines.push(days[di].padEnd(3, " ") + " " + m[di].map(codeHeat).join(""));
-    }
+    for (let di = 0; di < 7; di++) lines.push(days[di].padEnd(3, " ") + " " + m[di].map(codeHeat).join(""));
     return "```\n" + lines.join("\n") + "\n```";
   };
 
@@ -891,6 +906,7 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
 
   await discordWebhook({ username: "Watchlist", content: text });
 
+
   res.status(201).json(item);
 });
 
@@ -905,8 +921,8 @@ app.delete(["/api/watchlist/:jcode", "/watchlist/:jcode"], requireAdmin, (req, r
 });
 // ---- Nightly digest 00:00 UTC ----
 cron.schedule('0 0 * * *', async () => {
-  const url = process.env.WATCHLIST_WEBHOOK_URL;
-  if (!url) return;
+  const hook = process.env.WATCHLIST_WEBHOOK_URL || process.env.DISCORD_WEBHOOK_URL;
+  if (!hook) return;
 
   const list = getWatchlist();
   if (!list.length) return;
@@ -915,17 +931,23 @@ cron.schedule('0 0 * * *', async () => {
 
   for (const item of list) {
     try {
-      const { count, rows } = await killsLast24h(item.systemId);
+      // window size: min(seconds since added, 24h), but at least 60s
+      const addedAtMs = Date.parse(item.addedAt) || Date.now();
+      const secondsSinceAdded = Math.max(0, Math.floor((Date.now() - addedAtMs) / 1000));
+      const s = Math.max(60, Math.min(secondsSinceAdded || 86400, 86400));
 
-      // gather any new corps from detailed killmails
-      const detail = await Promise.all(rows.slice(0, 40).map(expandKillmail)); // hard cap to be gentle
+      // pull kills in window
+      const url = `https://zkillboard.com/api/solarSystemID/${item.systemId}/pastSeconds/${s}/`;
+      const rows = await fetchZkillArray(url);
+      const count = rows.length;
+
+      // discover new corps (victim + attackers) from detailed killmails (gentle cap)
+      const detail = await Promise.all(rows.slice(0, 40).map(expandKillmail));
       const corps24h = new Set();
       for (const km of detail) {
         if (!km) continue;
         if (km.victim?.corporation_id) corps24h.add(String(km.victim.corporation_id));
-        for (const a of km.attackers || []) {
-          if (a?.corporation_id) corps24h.add(String(a.corporation_id));
-        }
+        for (const a of km.attackers || []) if (a?.corporation_id) corps24h.add(String(a.corporation_id));
       }
 
       const seenForJ = seen[item.jcode] || {};
@@ -934,23 +956,18 @@ cron.schedule('0 0 * * *', async () => {
       seen[item.jcode] = seenForJ;
       setSeenCorps(seen);
 
-      // optional teeny ascii heatmap from zKill’s 61d feed (coarse)
-      let heatmapText = '';
-      try {
-        const all = await (await fetch(zkill(['solarSystemID', String(item.systemId)]))).json();
-        const mat = Array.from({ length: 7 }, () => Array(24).fill(0));
-        const now = Date.now();
-        for (const k of all) {
-          const ts = new Date(k.killmail_time || k.zkb?.published || 0).getTime();
-          if (!ts || (now - ts) > 61 * 86400000) continue;
-          const d = new Date(ts);
-          mat(d.getUTCDay())[d.getUTCHours()]++;
-        }
-        heatmapText = toAsciiHeatmap(mat);
-      } catch { }
+      // small UTC hour bar built from this window
+      const perHour = new Array(24).fill(0);
+      for (const k of rows) {
+        const t = Date.parse(k?.killmail_time);
+        if (!Number.isFinite(t)) continue;
+        const h = new Date(t).getUTCHours();
+        perHour[h]++;
+      }
+      const heatbar = toAsciiHourBar(perHour);
 
       const lines = [
-        `**${item.jcode}** — new activity: **${count} kill${count === 1 ? '' : 's'}** in the last 24h`,
+        `**${item.jcode}** — new activity: **${count} kill${count === 1 ? '' : 's'}** in the last ${Math.floor(s / 3600) || 0}h`,
         `<https://zkillboard.com/system/${item.systemId}/>`,
       ];
 
@@ -960,14 +977,20 @@ cron.schedule('0 0 * * *', async () => {
         if (newCorps.length > 8) lines.push(`…and ${newCorps.length - 8} more`);
       }
 
-      if (heatmapText) lines.push('', heatmapText);
+      if (rows.length) lines.push('', heatbar);
 
-      await discordWebhook({ username: 'Watchlist', content: lines.join('\n') });
+      // post directly to webhook (avoid env name mismatch with helper)
+      await fetch(hook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: 'Watchlist', content: lines.join('\n') })
+      });
     } catch (e) {
       // swallow one system’s failure and continue
     }
   }
 }, { timezone: 'UTC' });
+
 
 
 // ---- Start server ----
