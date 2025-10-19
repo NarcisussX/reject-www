@@ -765,12 +765,12 @@ app.get(["/api/zkill-corp-activity/:corpId", "/zkill-corp-activity/:corpId"], as
 // ---- Watchlist API ----
 
 // GET list (no auth needed if you prefer, but you can add requireAdmin)
-app.get('/api/watchlist', (req, res) => {
+app.get(['/api/watchlist', '/watchlist'], (req, res) => {
   res.json(getWatchlist());
 });
 
 // POST add { jcode }
-app.post('/api/watchlist', requireAdmin, async (req, res) => {
+app.post(['/api/watchlist', '/watchlist'], requireAdmin, async (req, res) => {
   const J = String(req.body?.jcode || '').toUpperCase();
   if (!/^J\d{6}$/.test(J)) return res.status(400).json({ error: 'Invalid J-code' });
 
@@ -819,7 +819,7 @@ app.post('/api/watchlist', requireAdmin, async (req, res) => {
 });
 
 // DELETE /api/watchlist/:jcode
-app.delete('/api/watchlist/:jcode', requireAdmin, (req, res) => {
+app.delete(['/api/watchlist/:jcode', '/watchlist/:jcode'], requireAdmin, (req, res) => {
   const J = String(req.params.jcode || '').toUpperCase();
   const list = getWatchlist();
   const next = list.filter(x => x.jcode !== J);
