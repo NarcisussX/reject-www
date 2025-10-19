@@ -35,14 +35,13 @@ services:
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL}
       DB_PATH: /data/reject.db
       NODE_ENV: production
-      A4E_AGE_CSV: /app/seed/a4e_first_seen_monotone.csv
-      DATA_DIR: /app/state
+      A4E_AGE_CSV: /app/data/a4e_first_seen_monotone.csv
+      DATA_DIR: /app/data 
     tmpfs:
       - /tmp
     volumes:
       - reject_data:/data
-      - ./data:/app/seed:ro 
-      - reject_api_state:/app/state:rw
+      - reject_api_data:/app/data:rw
     networks:
       - tw_web
     restart: unless-stopped
