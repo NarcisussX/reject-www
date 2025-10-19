@@ -854,38 +854,45 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   setWatchlist(list);
 
   // --- intel blurb using startTime/<YYYY-MM-DD> ---
-  // --- intel blurb using startTime/<YYYY-MM-DD> with safe parsing ---
-  // --- intel blurb (zKill startTime with YmdHi, fallback to limit/200) ---
-  const sinceDate = new Date(Date.now() - 61 * 86400000); // 61 days back (UTC)
-  const startKey = ymdHiUTC(sinceDate);                  // e.g. 20250819 00:00 -> "202508190000"
-  const urlPrimary = `https://zkillboard.com/api/solarSystemID/${systemId}/startTime/${startKey}/`;
-  const urlFallback = `https://zkillboard.com/api/solarSystemID/${systemId}/limit/200/`;
+  const MAX_AGE_DAYS = 60;
+  const BATCH_SIZE = 20;
+  const now = dayjs();
 
-  let rows = await fetchZkillArray(urlPrimary);
-  if (!rows.length) {
-    const latest = await fetchZkillArray(urlFallback);
-    if (latest.length) {
-      const cutoff = Date.now() - 61 * 86400000;
-      rows = latest.filter(k => {
-        const t = Date.parse(k?.killmail_time);
-        return Number.isFinite(t) && t >= cutoff;
-      });
+  // 1) Base list (same as in killboard summary)
+  const killmails = await fetchJSON(`https://zkillboard.com/api/solarSystemID/${systemId}/`);
+
+  // 2) Walk details via ESI, early stop when > MAX_AGE_DAYS (same style)
+  let totalKills = 0;
+  let mostRecent = null;
+  const cutoff = now.subtract(MAX_AGE_DAYS, "day");
+  const mat = Array.from({ length: 7 }, () => Array(24).fill(0)); // 7×24 heatmap from rows we actually counted
+
+  for (let i = 0; i < killmails.length; i += BATCH_SIZE) {
+    const batch = killmails.slice(i, i + BATCH_SIZE);
+    const details = await Promise.allSettled(
+      batch.map(k =>
+        fetchJSON(`https://esi.evetech.net/latest/killmails/${k.killmail_id}/${k.zkb.hash}/?datasource=tranquility`)
+      )
+    );
+
+    for (const r of details) {
+      if (r.status !== "fulfilled") continue;
+      const kill = r.value;
+      if (!kill?.killmail_time) continue;
+
+      const t = dayjs(kill.killmail_time);
+      if (t.isBefore(cutoff)) { i = killmails.length; break; } // early stop like your summary
+
+      totalKills++;
+      if (!mostRecent || t.isAfter(mostRecent)) mostRecent = t;
+
+      const d = t.toDate();
+      mat[d.getUTCDay()][d.getUTCHours()]++;
     }
   }
 
-  const count = rows.length;
-  const lastKillAgo = count
-    ? Math.round((Date.now() - Date.parse(rows[0]?.killmail_time)) / 86400000)
-    : null;
-
-  // Build 7×24 UTC heatmap from the rows
-  const mat = Array.from({ length: 7 }, () => Array(24).fill(0));
-  for (const k of rows) {
-    const t = Date.parse(k?.killmail_time);
-    if (!Number.isFinite(t)) continue;
-    const d = new Date(t);
-    mat[d.getUTCDay()][d.getUTCHours()]++;
-  }
+  // 3) Compute “last kill” and format heatmap text
+  const lastKillAgo = mostRecent ? now.diff(mostRecent, "day") : null;
   const codeHeat = (v) => (v <= 0 ? "·" : v <= 2 ? "░" : v <= 5 ? "▒" : "▓");
   const toAsciiHeatmap = (m) => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -899,7 +906,7 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
     `<https://zkillboard.com/system/${systemId}/>`,
     "",
     `**Kills / Recent Kill**`,
-    `${count} kill${count === 1 ? "" : "s"} in last 61 days, the last one was ${lastKillAgo ?? "N/A"} days ago`,
+    `${totalKills} kill${totalKills === 1 ? "" : "s"} in last ${MAX_AGE_DAYS} days, the last one was ${lastKillAgo ?? "N/A"} days ago`,
     "",
     toAsciiHeatmap(mat),
   ].join("\n");
@@ -931,23 +938,35 @@ cron.schedule('0 0 * * *', async () => {
 
   for (const item of list) {
     try {
-      // window size: min(seconds since added, 24h), but at least 60s
+      // window seconds (min since added, 24h max, at least 60s)
       const addedAtMs = Date.parse(item.addedAt) || Date.now();
       const secondsSinceAdded = Math.max(0, Math.floor((Date.now() - addedAtMs) / 1000));
       const s = Math.max(60, Math.min(secondsSinceAdded || 86400, 86400));
+      const cutoff = Date.now() - s * 1000;
 
-      // pull kills in window
-      const url = `https://zkillboard.com/api/solarSystemID/${item.systemId}/pastSeconds/${s}/`;
-      const rows = await fetchZkillArray(url);
-      const count = rows.length;
+      // 1) base list (same endpoint that works for you)
+      const base = await fetchJSON(`https://zkillboard.com/api/solarSystemID/${item.systemId}/`);
 
-      // discover new corps (victim + attackers) from detailed killmails (gentle cap)
-      const detail = await Promise.all(rows.slice(0, 40).map(expandKillmail));
+      // 2) filter to window by killmail_time (no ESI yet)
+      const recent = base.filter(k => {
+        const t = Date.parse(k?.killmail_time);
+        return Number.isFinite(t) && t >= cutoff;
+      });
+
+      const count = recent.length;
+
+      // 3) expand a small subset to find new corps (victim + attackers)
+      const detail = await Promise.allSettled(
+        recent.slice(0, 40).map(k =>
+          fetchJSON(`https://esi.evetech.net/latest/killmails/${k.killmail_id}/${k.zkb.hash}/?datasource=tranquility`)
+        )
+      );
       const corps24h = new Set();
-      for (const km of detail) {
-        if (!km) continue;
-        if (km.victim?.corporation_id) corps24h.add(String(km.victim.corporation_id));
-        for (const a of km.attackers || []) if (a?.corporation_id) corps24h.add(String(a.corporation_id));
+      for (const r of detail) {
+        if (r.status !== "fulfilled") continue;
+        const km = r.value;
+        if (km?.victim?.corporation_id) corps24h.add(String(km.victim.corporation_id));
+        for (const a of km?.attackers || []) if (a?.corporation_id) corps24h.add(String(a.corporation_id));
       }
 
       const seenForJ = seen[item.jcode] || {};
@@ -956,18 +975,20 @@ cron.schedule('0 0 * * *', async () => {
       seen[item.jcode] = seenForJ;
       setSeenCorps(seen);
 
-      // small UTC hour bar built from this window
+      // 4) compact UTC hour bar from the window rows
       const perHour = new Array(24).fill(0);
-      for (const k of rows) {
+      for (const k of recent) {
         const t = Date.parse(k?.killmail_time);
         if (!Number.isFinite(t)) continue;
-        const h = new Date(t).getUTCHours();
-        perHour[h]++;
+        perHour[new Date(t).getUTCHours()]++;
       }
-      const heatbar = toAsciiHourBar(perHour);
+      const codeHeat = (v) => (v <= 0 ? "·" : v <= 2 ? "░" : v <= 5 ? "▒" : "▓");
+      const heatbar = recent.length
+        ? "```\nUTC hours (last window)\n " + perHour.map(codeHeat).join("") + "\n```"
+        : "";
 
       const lines = [
-        `**${item.jcode}** — new activity: **${count} kill${count === 1 ? '' : 's'}** in the last ${Math.floor(s / 3600) || 0}h`,
+        `**${item.jcode}** — new activity: **${count} kill${count === 1 ? '' : 's'}** in the last ${Math.floor(s/3600)}h`,
         `<https://zkillboard.com/system/${item.systemId}/>`,
       ];
 
@@ -977,19 +998,19 @@ cron.schedule('0 0 * * *', async () => {
         if (newCorps.length > 8) lines.push(`…and ${newCorps.length - 8} more`);
       }
 
-      if (rows.length) lines.push('', heatbar);
+      if (heatbar) lines.push('', heatbar);
 
-      // post directly to webhook (avoid env name mismatch with helper)
       await fetch(hook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: 'Watchlist', content: lines.join('\n') })
       });
-    } catch (e) {
-      // swallow one system’s failure and continue
+    } catch {
+      // continue to next system
     }
   }
 }, { timezone: 'UTC' });
+
 
 
 
