@@ -926,43 +926,57 @@ app.delete(["/api/watchlist/:jcode", "/watchlist/:jcode"], requireAdmin, (req, r
   setWatchlist(next);
   res.sendStatus(204);
 });
-// ---- Nightly digest 00:00 UTC ----
-cron.schedule('0 0 * * *', async () => {
-  const hook = process.env.WATCHLIST_WEBHOOK_URL || process.env.DISCORD_WEBHOOK_URL;
-  if (!hook) return;
 
-  const list = getWatchlist();
-  if (!list.length) return;
+// --- helpers (use your fetchJSON if present) ---
+async function safeFetchJSON(url) {
+  try {
+    const r = await fetch(url, { headers: UA_HEADERS });
+    if (!r.ok) return null;
+    const ct = r.headers.get("content-type") || "";
+    if (!ct.includes("application/json")) { await r.text().catch(() => ""); return null; }
+    return await r.json().catch(() => null);
+  } catch { return null; }
+}
+const jf = typeof fetchJSON === "function" ? fetchJSON : safeFetchJSON;
 
-  const seen = getSeenCorps();
+// --- digest runner ---
+let _digestRunning = false;
+/** runWatchlistDigest({ dryRun?: boolean, seconds?: number, jcode?: string }) */
+async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
+  if (_digestRunning) return { ok: false, running: true };
+  _digestRunning = true;
+  try {
+    const hook = process.env.WATCHLIST_WEBHOOK_URL || process.env.DISCORD_WEBHOOK_URL;
+    const listAll = getWatchlist();
+    const list = jcode ? listAll.filter(it => it.jcode === String(jcode).toUpperCase()) : listAll;
+    const seen = getSeenCorps();
+    const reports = [];
 
-  for (const item of list) {
-    try {
-      // window seconds (min since added, 24h max, at least 60s)
+    for (const item of list) {
+      // window seconds: min(since-added, 24h), >= 60s; allow override
       const addedAtMs = Date.parse(item.addedAt) || Date.now();
-      const secondsSinceAdded = Math.max(0, Math.floor((Date.now() - addedAtMs) / 1000));
-      const s = Math.max(60, Math.min(secondsSinceAdded || 86400, 86400));
+      const sinceAdded = Math.max(0, Math.floor((Date.now() - addedAtMs) / 1000));
+      const s = Math.max(60, Math.min(Number.isFinite(seconds) ? seconds : (sinceAdded || 86400), 86400));
       const cutoff = Date.now() - s * 1000;
 
-      // 1) base list (same endpoint that works for you)
-      const base = await fetchJSON(`https://zkillboard.com/api/solarSystemID/${item.systemId}/`);
+      // 1) base list from the SAME working endpoint you already use
+      const base = (await jf(`https://zkillboard.com/api/solarSystemID/${item.systemId}/`)) || [];
 
-      // 2) filter to window by killmail_time (no ESI yet)
+      // 2) filter to the window by killmail_time
       const recent = base.filter(k => {
         const t = Date.parse(k?.killmail_time);
         return Number.isFinite(t) && t >= cutoff;
       });
-
       const count = recent.length;
 
-      // 3) expand a small subset to find new corps (victim + attackers)
-      const detail = await Promise.allSettled(
+      // 3) expand a subset to discover new corps (victim + attackers)
+      const details = await Promise.allSettled(
         recent.slice(0, 40).map(k =>
-          fetchJSON(`https://esi.evetech.net/latest/killmails/${k.killmail_id}/${k.zkb.hash}/?datasource=tranquility`)
+          jf(`https://esi.evetech.net/latest/killmails/${k.killmail_id}/${k.zkb.hash}/?datasource=tranquility`)
         )
       );
       const corps24h = new Set();
-      for (const r of detail) {
+      for (const r of details) {
         if (r.status !== "fulfilled") continue;
         const km = r.value;
         if (km?.victim?.corporation_id) corps24h.add(String(km.victim.corporation_id));
@@ -973,45 +987,62 @@ cron.schedule('0 0 * * *', async () => {
       const newCorps = [...corps24h].filter(cid => !seenForJ[cid]);
       newCorps.forEach(cid => (seenForJ[cid] = true));
       seen[item.jcode] = seenForJ;
-      setSeenCorps(seen);
 
-      // 4) compact UTC hour bar from the window rows
+      // 4) compact UTC hour bar
       const perHour = new Array(24).fill(0);
       for (const k of recent) {
         const t = Date.parse(k?.killmail_time);
         if (!Number.isFinite(t)) continue;
         perHour[new Date(t).getUTCHours()]++;
       }
-      const codeHeat = (v) => (v <= 0 ? "·" : v <= 2 ? "░" : v <= 5 ? "▒" : "▓");
+      const codeHeat = v => (v <= 0 ? "·" : v <= 2 ? "░" : v <= 5 ? "▒" : "▓");
       const heatbar = recent.length
         ? "```\nUTC hours (last window)\n " + perHour.map(codeHeat).join("") + "\n```"
         : "";
 
       const lines = [
-        `**${item.jcode}** — new activity: **${count} kill${count === 1 ? '' : 's'}** in the last ${Math.floor(s/3600)}h`,
+        `**${item.jcode}** — new activity: **${count} kill${count === 1 ? "" : "s"}** in the last ${Math.floor(s / 3600)}h`,
         `<https://zkillboard.com/system/${item.systemId}/>`,
       ];
-
       if (newCorps.length) {
         const corpLinks = newCorps.slice(0, 8).map(cid => `New corp: <https://zkillboard.com/corporation/${cid}/>`);
-        lines.push('', ...corpLinks);
+        lines.push("", ...corpLinks);
         if (newCorps.length > 8) lines.push(`…and ${newCorps.length - 8} more`);
       }
+      if (heatbar) lines.push("", heatbar);
 
-      if (heatbar) lines.push('', heatbar);
+      const content = lines.join("\n");
 
-      await fetch(hook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: 'Watchlist', content: lines.join('\n') })
-      });
-    } catch {
-      // continue to next system
+      // ✅ actually post to the webhook if not a dry run
+      if (!dryRun && hook) {
+        await fetch(hook, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: "Watchlist", content }),
+        });
+      }
+
+      reports.push({ jcode: item.jcode, systemId: item.systemId, count, seconds: s, newCorps: newCorps.length });
     }
+
+    setSeenCorps(seen);
+    return { ok: true, reports };
+  } finally {
+    _digestRunning = false;
   }
-}, { timezone: 'UTC' });
+}
 
 
+// ---- Nightly digest 00:00 UTC ----
+cron.schedule('0 0 * * *', () => { runWatchlistDigest().catch(() => {}); }, { timezone: 'UTC' });
+
+app.post(['/api/admin/watchlist/_run', '/admin/watchlist/_run'], requireAdmin, async (req, res) => {
+  const dry = req.query.dry === '1' || req.body?.dryRun === true;
+  const s   = req.query.s ? Number(req.query.s) : undefined;              // window seconds override
+  const j   = req.query.j ? String(req.query.j).toUpperCase() : undefined; // only this J-code
+  const out = await runWatchlistDigest({ dryRun: dry, seconds: s, jcode: j });
+  res.json(out);
+});
 
 
 // ---- Start server ----
