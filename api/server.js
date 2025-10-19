@@ -80,44 +80,54 @@ function setSeenCorps(map) {
 
 // --- ESI + zKill helpers ---
 async function resolveSystemId(jcode) {
-  const m = String(jcode || "").toUpperCase().match(/J\d{6}/);
-  if (!m) return null;
-  const J = m[0];
+  const J = String(jcode || "").toUpperCase().match(/J\d{6}/)?.[0];
+  if (!J) return null;
 
+  const UA = { "Accept": "application/json", "User-Agent": "RejectWatchlist/1.0 (+reject.app)" };
+
+  // 1) Preferred: POST /universe/ids  (returns { systems: [...] })
   try {
-    // Preferred: POST /universe/ids (ESI returns { systems: [...] })
-    let r = await fetch(
-      "https://esi.evetech.net/latest/universe/ids/?datasource=tranquility",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
-        body: JSON.stringify([J]),
-      }
-    );
+    const r = await fetch("https://esi.evetech.net/latest/universe/ids/?datasource=tranquility", {
+      method: "POST",
+      headers: { ...UA, "Content-Type": "application/json" },
+      body: JSON.stringify([J]),
+    });
     if (r.ok) {
       const d = await r.json();
-      const arr = d.systems || d.solar_systems || []; // some libs used the old key
+      const arr = d.systems || d.solar_systems || [];
       const hit = arr.find(s => String(s.name).toUpperCase() === J);
       if (hit?.id) return hit.id;
+      console.warn("universe/ids: no match for", J, "payload:", d);
+    } else {
+      console.warn("universe/ids status", r.status, await r.text().catch(() => ""));
     }
+  } catch (e) {
+    console.warn("universe/ids error", e);
+  }
 
-    // Fallback: strict search
+  // 2) Fallback: GET /search?categories=solar_system&strict=true
+  try {
     const qs = new URLSearchParams({
       categories: "solar_system",
       search: J,
       strict: "true",
       datasource: "tranquility",
     }).toString();
-    r = await fetch(`https://esi.evetech.net/latest/search/?${qs}`);
+    const r = await fetch(`https://esi.evetech.net/latest/search/?${qs}`, { headers: UA });
     if (r.ok) {
       const j = await r.json();
       if (Array.isArray(j?.solar_system) && j.solar_system.length) return j.solar_system[0];
+      console.warn("search: no match for", J, "payload:", j);
+    } else {
+      console.warn("search status", r.status, await r.text().catch(() => ""));
     }
-  } catch {
-    // ignore
+  } catch (e) {
+    console.warn("search error", e);
   }
+
   return null;
 }
+
 
 
 const zkill = (parts) => `https://zkillboard.com/api/${parts.join('/')}/`;
