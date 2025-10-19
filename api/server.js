@@ -664,7 +664,7 @@ async function fetchJSON(url, init = {}) {
     ...init,
     headers: {
       "Accept": "application/json",
-      "User-Agent": "RejectIntel/1.0 (+reject.app)", // be polite to zKill/ESI
+      "User-Agent": "RejectIntel/1.0 (+reject.app)", 
       ...(init.headers || {})
     }
   });
@@ -838,7 +838,7 @@ app.get(["/api/zkill-corp-activity/:corpId", "/zkill-corp-activity/:corpId"], as
 });
 // ---- Watchlist API ----
 
-// GET list (no auth needed if you prefer, but you can add requireAdmin)
+// GET list 
 app.get(["/api/watchlist", "/watchlist"], (req, res) => {
   res.json(getWatchlist());
 });
@@ -849,7 +849,7 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   if (!/^J\d{6}$/.test(J)) return res.status(400).json({ error: 'Invalid J-code' });
   const note = clampNote(req.body?.note);
   let list = getWatchlist();
-  if (list.some(x => x.jcode === J)) return res.status(200).json({ ok: true }); // already present
+  if (list.some(x => x.jcode === J)) return res.status(200).json({ ok: true }); 
 
   // resolve system ID
   const systemId = await resolveSystemId(J);
@@ -864,14 +864,14 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   const BATCH_SIZE = 20;
   const now = dayjs();
 
-  // 1) Base list (same as in killboard summary)
+  // 1) Base list 
   const killmails = await fetchJSON(`https://zkillboard.com/api/solarSystemID/${systemId}/`);
 
   // 2) Walk details via ESI, early stop when > MAX_AGE_DAYS (same style)
   let totalKills = 0;
   let mostRecent = null;
   const cutoff = now.subtract(MAX_AGE_DAYS, "day");
-  const mat = Array.from({ length: 7 }, () => Array(24).fill(0)); // 7×24 heatmap from rows we actually counted
+  const mat = Array.from({ length: 7 }, () => Array(24).fill(0)); // 7×24 heatmap 
 
   for (let i = 0; i < killmails.length; i += BATCH_SIZE) {
     const batch = killmails.slice(i, i + BATCH_SIZE);
@@ -887,7 +887,7 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
       if (!kill?.killmail_time) continue;
 
       const t = dayjs(kill.killmail_time);
-      if (t.isBefore(cutoff)) { i = killmails.length; break; } // early stop like your summary
+      if (t.isBefore(cutoff)) { i = killmails.length; break; } // early stop 
 
       totalKills++;
       if (!mostRecent || t.isAfter(mostRecent)) mostRecent = t;
@@ -907,7 +907,7 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
     return "```\n" + lines.join("\n") + "\n```";
   };
 
-  // --------- NEW: rich embed payload ----------
+  // --------- rich embed payload ----------
   const embed = compact({
     title: `${J} added to watchlist`,
     url: `https://zkillboard.com/system/${systemId}/`,
@@ -947,7 +947,7 @@ app.delete(["/api/watchlist/:jcode", "/watchlist/:jcode"], requireAdmin, (req, r
   res.sendStatus(204);
 });
 
-// --- helpers (use your fetchJSON if present) ---
+// --- helpers ---
 async function safeFetchJSON(url) {
   try {
     const r = await fetch(url, { headers: UA_HEADERS });
@@ -959,7 +959,7 @@ async function safeFetchJSON(url) {
 }
 const jf = typeof fetchJSON === "function" ? fetchJSON : safeFetchJSON;
 
-// --- digest runner (embeds for active + embeds for inactive) ---
+// --- digest runner ---
 let _digestRunning = false;
 /** runWatchlistDigest({ dryRun?: boolean, seconds?: number, jcode?: string }) */
 async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
@@ -993,7 +993,7 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
       const windowHours = Math.max(1, Math.floor(s / 3600));
       const cutoffUnix = Math.floor(cutoff / 1000);
 
-      // 1) base list (your working endpoint)
+      // 1) base list 
       const base = (await jf(`https://zkillboard.com/api/solarSystemID/${item.systemId}/`)) || [];
 
       // 2) filter to window
@@ -1071,7 +1071,7 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
     // persist "seen corps"
     setSeenCorps(seen);
 
-    // ---- POSTING (respect Discord limits) ----
+    // ---- POSTING  ----
     if (!dryRun && hook) {
       // Active: batch by 10 embeds per message
       for (let i = 0; i < activeEmbeds.length; i += 10) {
