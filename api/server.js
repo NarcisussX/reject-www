@@ -68,7 +68,7 @@ const clampNote = (s) => {
 
 const compact = (o) => JSON.parse(JSON.stringify(o)); // strips undefined for embeds
 
-const fetchZkillArray = async (url) => {
+async function fetchZkillArray(url) {
   try {
     const r = await fetch(url, { headers: UA_HEADERS });
     if (!r.ok) return [];
@@ -77,8 +77,24 @@ const fetchZkillArray = async (url) => {
     const j = await r.json().catch(() => null);
     return Array.isArray(j) ? j : [];
   } catch { return []; }
-};
+}
+async function getRecent(systemId, s) {
+  // 1) primary: pastSeconds (NO timestamps; but guaranteed in-window)
+  let rows = await fetchZkillArray(`https://zkillboard.com/api/solarSystemID/${systemId}/pastSeconds/${s}/`);
+  if (rows.length) return { rows, haveTimes: false };
 
+  // 2) fallback: /kills/ variant (also NO timestamps)
+  rows = await fetchZkillArray(`https://zkillboard.com/api/kills/solarSystemID/${systemId}/pastSeconds/${s}/`);
+  if (rows.length) return { rows, haveTimes: false };
+
+  // 3) base list → filter by killmail_time (HAS timestamps)
+  const base = (await (typeof fetchJSON === "function" ? fetchJSON : fetchZkillArray)(`https://zkillboard.com/api/solarSystemID/${systemId}/`)) || [];
+  if (!base.length) return { rows: [], haveTimes: false };
+
+  const cutoff = Date.now() - s * 1000;
+  const filtered = base.filter(k => Number.isFinite(Date.parse(k?.killmail_time)) && Date.parse(k.killmail_time) >= cutoff);
+  return { rows: filtered, haveTimes: true };
+}
 const ymdHiUTC = (d) => {
   const pad = (n, w = 2) => String(n).padStart(w, "0");
   return (
@@ -664,7 +680,7 @@ async function fetchJSON(url, init = {}) {
     ...init,
     headers: {
       "Accept": "application/json",
-      "User-Agent": "RejectIntel/1.0 (+reject.app)", 
+      "User-Agent": "RejectIntel/1.0 (+reject.app)",
       ...(init.headers || {})
     }
   });
@@ -849,7 +865,7 @@ app.post(["/api/watchlist", "/watchlist"], requireAdmin, async (req, res) => {
   if (!/^J\d{6}$/.test(J)) return res.status(400).json({ error: 'Invalid J-code' });
   const note = clampNote(req.body?.note);
   let list = getWatchlist();
-  if (list.some(x => x.jcode === J)) return res.status(200).json({ ok: true }); 
+  if (list.some(x => x.jcode === J)) return res.status(200).json({ ok: true });
 
   // resolve system ID
   const systemId = await resolveSystemId(J);
@@ -994,13 +1010,8 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
       const cutoffUnix = Math.floor(cutoff / 1000);
 
       // 1) base list 
-      const base = (await jf(`https://zkillboard.com/api/solarSystemID/${item.systemId}/`)) || [];
-
-      // 2) filter to window
-      const recent = base.filter(k => {
-        const t = Date.parse(k?.killmail_time);
-        return Number.isFinite(t) && t >= cutoff;
-      });
+      // Robust recent-kills fetch (handles /pastSeconds which has no timestamps)
+      const { rows: recent } = await getRecent(item.systemId, s);
       const count = recent.length;
 
       if (count === 0) {

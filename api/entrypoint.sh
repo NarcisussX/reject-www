@@ -14,6 +14,4 @@ if [ ! -f "$CSV_TARGET" ] && [ -f "$CSV_SOURCE" ]; then
   cp -f "$CSV_SOURCE" "$CSV_TARGET"
 fi
 
-# Hand off to the original command (defined by your image/CMD)
-# If your app starts with "node server.js", exec that directly:
 exec node /app/server.js
