@@ -757,15 +757,23 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
     const killmails = await fetchJSON(`https://zkillboard.com/api/solarSystemID/${systemId}/`);
 
     // caches + accumulators
-    const corpNameCache = new Map();
-    async function corpName(id) {
+    const corpNameCache = new Map(); // id -> name
+
+    async function corpName(cid) {
+      const id = String(cid);
       if (corpNameCache.has(id)) return corpNameCache.get(id);
       try {
         const j = await fetchJSON(`https://esi.evetech.net/latest/corporations/${id}/?datasource=tranquility`);
-        corpNameCache.set(id, j.name || "Unknown Corp");
-      } catch { corpNameCache.set(id, "Unknown Corp"); }
-      return corpNameCache.get(id);
+        const name = (j && j.name) ? j.name : `Corporation ${id}`;
+        corpNameCache.set(id, name);
+        return name;
+      } catch {
+        const fallback = `Corporation ${id}`;
+        corpNameCache.set(id, fallback);
+        return fallback;
+      }
     }
+
 
     const corpActivity = new Map();
     let totalKills = 0;
@@ -1052,8 +1060,13 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
       newCorps.forEach(cid => (seenForJ[cid] = true));
       seen[item.jcode] = seenForJ;
 
-      const newCorpsLinks = newCorps.slice(0, 8)
-        .map(cid => `[${cid}](https://zkillboard.com/corporation/${cid}/)`).join('\n');
+      const topNew = newCorps.slice(0, 8);
+      const named = await Promise.all(
+        topNew.map(async cid => ({ id: cid, name: await corpName(cid) }))
+      );
+      const newCorpsLinks = named
+        .map(({ id, name }) => `[${name}](https://zkillboard.com/corporation/${id}/)`)
+        .join('\n');
       const moreNote = newCorps.length > 8 ? `\n…and ${newCorps.length - 8} more` : "";
 
       activeEmbeds.push({
@@ -1066,7 +1079,7 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
           { name: "Kills", value: String(count), inline: true },
           { name: "New corps", value: String(newCorps.length), inline: true },
           ...(newCorps.length ? [{
-            name: "New corps (links)",
+            name: "New corps",
             value: (newCorpsLinks + moreNote).slice(0, 1024),
             inline: false
           }] : []),
