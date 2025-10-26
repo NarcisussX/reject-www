@@ -182,7 +182,7 @@ async function resolveSystemId(jcode) {
 const zkill = (parts) => `https://zkillboard.com/api/${parts.join('/')}/`;
 
 async function killsLast24h(systemId) {
-  const r = await fetch(zkill([`solarSystemID`, String(systemId), `pastSeconds`, `86400`]));
+  const r = await fetch(zkill([`solarSystemID`, String(systemId), `pastSeconds`, `86400`]), { headers: UA_HEADERS });
   if (!r.ok) return { count: 0, rows: [] };
   const rows = await r.json();
   return { count: rows.length, rows };
@@ -745,6 +745,21 @@ app.get(["/api/system-id/:jcode", "/system-id/:jcode"], async (req, res) => {
   }
 });
 
+const corpNameCache = new Map();
+async function corpName(cid) {
+  const id = String(cid);
+  if (corpNameCache.has(id)) return corpNameCache.get(id);
+  try {
+    const j = await jf(`https://esi.evetech.net/latest/corporations/${id}/?datasource=tranquility`);
+    const name = (j && j.name) ? j.name : `Corporation ${id}`;
+    corpNameCache.set(id, name);
+    return name;
+  } catch {
+    const fallback = `Corporation ${id}`;
+    corpNameCache.set(id, fallback);
+    return fallback;
+  }
+}
 
 app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], async (req, res) => {
   try {
@@ -757,13 +772,19 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
     const killmails = await fetchJSON(`https://zkillboard.com/api/solarSystemID/${systemId}/`);
 
     // caches + accumulators
-    const corpNameCache = new Map(); // id -> name
+    const corpNameCache = new Map();
 
     async function corpName(cid) {
       const id = String(cid);
       if (corpNameCache.has(id)) return corpNameCache.get(id);
+
+      const get = typeof fetchJSON === 'function' ? fetchJSON : async (url) => {
+        const r = await fetch(url); if (!r.ok) throw new Error('ESI fail');
+        return r.json();
+      };
+
       try {
-        const j = await fetchJSON(`https://esi.evetech.net/latest/corporations/${id}/?datasource=tranquility`);
+        const j = await get(`https://esi.evetech.net/latest/corporations/${id}/?datasource=tranquility`);
         const name = (j && j.name) ? j.name : `Corporation ${id}`;
         corpNameCache.set(id, name);
         return name;
@@ -773,6 +794,7 @@ app.get(["/api/killboard-summary/:systemId", "/killboard-summary/:systemId"], as
         return fallback;
       }
     }
+
 
 
     const corpActivity = new Map();
@@ -1123,11 +1145,11 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
 
 // ---- Nightly digest 00:00 UTC ----
 cron.schedule(
-  '0 25 2 * * *',                    // midnight UTC
+  '0 39 2 * * *',                    // midnight UTC
   async () => {
     console.log('[watchlist/cron] tick 00:00 UTC', new Date().toISOString());
     try {
-      const res = await runWatchlistDigest();   
+      const res = await runWatchlistDigest();
       console.log('[watchlist/cron] done', JSON.stringify(res));
 
       // safety: if nothing was posted (0 active & 0 inactive), retry once at +5m
