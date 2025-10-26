@@ -88,6 +88,7 @@ function ReinforcePopover() {
             await navigator.clipboard.writeText(`<t:${epoch}:t>`);
             setCopied(true);
             setTimeout(() => setCopied(false), 1200);
+            // eslint-disable-next-line no-empty
         } catch { }
     }
 
