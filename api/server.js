@@ -1140,12 +1140,9 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
   }
 }
 
-
-
-
 // ---- Nightly digest 00:00 UTC ----
 cron.schedule(
-  '0 39 2 * * *',                    // midnight UTC
+  '0 0 0 * * *',                    // midnight UTC
   async () => {
     console.log('[watchlist/cron] tick 00:00 UTC', new Date().toISOString());
     try {
@@ -1192,8 +1189,6 @@ app.all(
     }
   }
 );
-
-
 
 // ---- Start server ----
 const port = 4000;
