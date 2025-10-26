@@ -1122,7 +1122,32 @@ async function runWatchlistDigest({ dryRun = false, seconds, jcode } = {}) {
 
 
 // ---- Nightly digest 00:00 UTC ----
-cron.schedule('0 0 * * *', () => { runWatchlistDigest().catch(() => { }); }, { timezone: 'UTC' });
+cron.schedule(
+  '0 25 2 * * *',                    // midnight UTC
+  async () => {
+    console.log('[watchlist/cron] tick 00:00 UTC', new Date().toISOString());
+    try {
+      const res = await runWatchlistDigest();   
+      console.log('[watchlist/cron] done', JSON.stringify(res));
+
+      // safety: if nothing was posted (0 active & 0 inactive), retry once at +5m
+      if ((res?.postedActive ?? 0) === 0 && (res?.postedInactive ?? 0) === 0) {
+        setTimeout(async () => {
+          console.log('[watchlist/cron] retry 00:05 UTC', new Date().toISOString());
+          try {
+            const r2 = await runWatchlistDigest();
+            console.log('[watchlist/cron] retry done', JSON.stringify(r2));
+          } catch (e) {
+            console.error('[watchlist/cron] retry error', e?.stack || e);
+          }
+        }, 5 * 60 * 1000);
+      }
+    } catch (e) {
+      console.error('[watchlist/cron] error', e?.stack || e);
+    }
+  },
+  { timezone: 'UTC' }
+);
 
 // Accept GET or POST, and both with/without /api prefix
 app.all(
