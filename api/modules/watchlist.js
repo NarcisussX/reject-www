@@ -286,7 +286,7 @@ export async function runWatchlistDigest({ dataDir, dryRun = false, seconds, jco
 
 export function scheduleWatchlistCron({ dataDir, enabled = true } = {}) {
   if (!enabled) return;
-  cron.schedule('0 0 0 * * *', async () => {
+  cron.schedule('38 3 * * *', async () => {
     console.log('[watchlist/cron] tick 00:00 UTC', new Date().toISOString());
     try {
       const res = await runWatchlistDigest({ dataDir });
